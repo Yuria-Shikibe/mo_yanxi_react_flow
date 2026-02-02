@@ -87,7 +87,7 @@ jobs:
           fi
           
           echo "Configuring with: $XMAKE_FLAGS $EXTRA_FLAGS"
-          xmake f -c $XMAKE_FLAGS $PLAT_FLAGS $EXTRA_FLAGS -y -cv
+          xmake f -cvy $XMAKE_FLAGS $PLAT_FLAGS $EXTRA_FLAGS
           
           xmake -bvy ${{ env.TARGET_NAME }}
 
