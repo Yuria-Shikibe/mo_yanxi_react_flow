@@ -12,8 +12,8 @@ namespace mo_yanxi::react_flow{
 export
 template <std::ranges::input_range Rng = std::initializer_list<node*>>
 void connect_chain(const Rng& chain){
-	if constexpr (std::ranges::range<std::ranges::range_const_reference_t<Rng>>){
-		std::ranges::for_each(chain, connect_chain<std::ranges::range_const_reference_t<Rng>>);
+	if constexpr (std::ranges::range<std::ranges::range_reference_t<Rng>>){
+		std::ranges::for_each(chain, connect_chain<std::ranges::range_reference_t<Rng>>);
 	}else{
 		for (auto && [l, r] : chain | std::views::adjacent<2>){
 			if constexpr (std::same_as<decltype(l), node&>){
