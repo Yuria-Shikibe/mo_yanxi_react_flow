@@ -69,7 +69,7 @@ target("mo_yanxi.react_flow")
     set_warnings("pedantic")
 target_end()
 
-target("test")
+target("mo_yanxi.react_flow.test")
     set_kind("binary")
     set_languages("c++23")
     set_policy("build.c++.modules", true)
