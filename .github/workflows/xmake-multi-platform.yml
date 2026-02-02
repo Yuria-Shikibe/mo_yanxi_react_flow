@@ -69,9 +69,9 @@ jobs:
       - name: Build ${{ matrix.mode }}
         shell: bash
         run: |
-          XMAKE_FLAGS="-m ${{ matrix.mode }} --toolchain=${{ matrix.toolchain }}"
-          EXTRA_FLAGS=""
-          PLAT_FLAGS=""
+          # 基础标志定义为数组
+          XMAKE_FLAGS=(-m ${{ matrix.mode }} --toolchain=${{ matrix.toolchain }} -yv)
+          EXTRA_FLAGS=()
           
           if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
              PLAT_FLAGS="-p linux"
@@ -81,13 +81,18 @@ jobs:
           
           if [[ "${{ matrix.os }}" == "ubuntu-latest" && "${{ matrix.toolchain }}" == "clang" ]]; then
              clang --version
-             EXTRA_FLAGS="--sdk=/usr/lib/llvm-${{ env.LLVM_VER }} --cxflags='-stdlib=libc++' --ldflags='-stdlib=libc++ -lc++abi -lunwind'"
-          else
-             EXTRA_FLAGS=""
+             # 关键点：使用数组存储带空格的参数，每个元素会被正确传递
+             EXTRA_FLAGS=(
+               "--sdk=/usr/lib/llvm-${{ env.LLVM_VER }}"
+               "--cxflags=-stdlib=libc++"
+               "--ldflags=-stdlib=libc++ -lc++abi -lunwind"
+             )
           fi
           
-          echo "Configuring with: $XMAKE_FLAGS $EXTRA_FLAGS"
-          xmake f -cvy $XMAKE_FLAGS $PLAT_FLAGS $EXTRA_FLAGS
+          echo "Configuring with: ${XMAKE_FLAGS[@]} $PLAT_FLAGS ${EXTRA_FLAGS[@]}"
+          
+          # 强制清理配置并传递数组参数
+          xmake f -c $PLAT_FLAGS "${XMAKE_FLAGS[@]}" "${EXTRA_FLAGS[@]}"
           
           xmake -bvy ${{ env.TARGET_NAME }}
 
