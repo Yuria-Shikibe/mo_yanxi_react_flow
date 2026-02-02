@@ -1,5 +1,7 @@
 module;
 
+#include <version>
+
 export module mo_yanxi.react_flow:manager;
 
 import :node_interface;
@@ -54,13 +56,20 @@ struct node_p : std::unique_ptr<node, node_deleter>{
 	}
 };
 
+#ifdef __cpp_lib_move_only_function
+using AsyncFuncType = std::move_only_function<void()>;
+#else
+using AsyncFuncType = std::function<void()>;
+#endif
+
+
 export struct manager{
 private:
 	std::vector<node_p> nodes_anonymous_{};
 	std::vector<node*> pulse_subscriber_{};
 	std::unordered_set<node*> expired_nodes{};
 
-	using async_task_queue = ccur::mpsc_queue<std::move_only_function<void()>>;
+	using async_task_queue = ccur::mpsc_queue<AsyncFuncType>;
 	async_task_queue pending_received_updates_{};
 	async_task_queue::container_type recycled_queue_container_{};
 
@@ -192,8 +201,8 @@ public:
 		}
 
 		if(pending_received_updates_.swap(recycled_queue_container_)){
-			for (auto&& move_only_function : recycled_queue_container_){
-				move_only_function();
+			for (auto&& fn : recycled_queue_container_){
+				fn();
 			}
 			recycled_queue_container_.clear();
 		}
