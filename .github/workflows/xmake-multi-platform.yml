@@ -85,7 +85,7 @@ jobs:
              EXTRA_FLAGS=(
                "--sdk=/usr/lib/llvm-${{ env.LLVM_VER }}"
                "--cxflags=-stdlib=libc++"
-               "--ldflags=-stdlib=libc++ -lc++abi -lunwind"
+               "--ldflags='-stdlib=libc++ -lc++abi -lunwind'"
              )
           fi
           
