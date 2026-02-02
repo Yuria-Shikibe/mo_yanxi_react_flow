@@ -24,14 +24,22 @@ package(pkg_name)
     end
 
     set_policy("platform.longpaths", true)
+    add_configs("add_legacy", {description = "Use Legacy Components.", default = false, type = "boolean"})
+    add_configs("add_latest", {description = "Use Latest Components.", default = false, type = "boolean"})
+
 
     on_install(function (package)
-        import("package.tools.xmake").install(package)
+        local configs = {}
+        configs.add_latest = package:config("add_latest")
+        configs.add_legacy = package:config("add_legacy")
+
+        import("package.tools.xmake").install(package, configs)
         os.cp("include/**.hpp", package:installdir("include"), {rootdir = "include"})
+
     end)
 package_end()
 
-add_requires(pkg_name)
+add_requires(pkg_name, {configs = {add_legacy = false, add_latest = false}})
 
 target("mo_yanxi.react_flow")
     set_kind("object")
@@ -41,6 +49,21 @@ target("mo_yanxi.react_flow")
     add_packages(pkg_name, {public = true})
     add_files("src/**.ixx", {public = true})
 
+
+    if is_mode("cmake_gen") then
+        on_load(function (target)
+            -- 1. 获取依赖包对象
+            local pkg = target:pkg(pkg_name)
+
+            if pkg then
+                local pkg_dir = pkg:installdir()
+                local ixx_pattern = path.join(pkg_dir, "modules", "**.ixx")
+                target:add("files", ixx_pattern, {public = true})
+
+                print("Adding module files: " .. ixx_pattern)
+            end
+        end)
+    end
 
     set_warnings("all")
     set_warnings("pedantic")
@@ -55,7 +78,7 @@ target("test")
     set_warnings("pedantic")
 
     add_deps("mo_yanxi.react_flow", {public = true})
-    add_files("src/**.ixx")
+    add_files("src/**.ixx", {public = true})
     add_files("test/**.cpp")
 target_end()
 
