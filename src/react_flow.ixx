@@ -1,3 +1,7 @@
+module;
+
+#include <version>
+
 export module mo_yanxi.react_flow;
 
 export import :node_interface;
@@ -15,7 +19,14 @@ void connect_chain(const Rng& chain){
 	if constexpr (std::ranges::range<std::ranges::range_reference_t<Rng>>){
 		std::ranges::for_each(chain, connect_chain<std::ranges::range_reference_t<Rng>>);
 	}else{
+#ifdef __cpp_lib_ranges_zip
 		for (auto && [l, r] : chain | std::views::adjacent<2>){
+#else
+		for (auto it = chain.begin(), next_it = std::next(it); next_it != chain.end(); ++it, ++next_it) {
+			auto&& l = *it;
+			auto&& r = *next_it;
+#endif
+
 			if constexpr (std::same_as<decltype(l), node&>){
 				l.connect_successors(r);
 			}else if(std::same_as<decltype(*l), node&>){
