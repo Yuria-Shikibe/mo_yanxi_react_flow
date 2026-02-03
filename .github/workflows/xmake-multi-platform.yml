@@ -97,3 +97,6 @@ jobs:
           xmake f -c $PLAT_FLAGS "${XMAKE_FLAGS[@]}" "${EXTRA_FLAGS[@]}"
 
           xmake -bvy ${{ env.TARGET_NAME }}
+
+      - name: Test
+        run: xmake run ${{ env.TARGET_NAME }}.test
