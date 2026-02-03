@@ -71,9 +71,9 @@ namespace mo_yanxi::react_flow{
 			on_update();
 		}
 
-		void on_push(manager& manager, std::size_t, void* in_data) override{
-			auto* storage = static_cast<push_data_storage<T>*>(in_data);
-			data_ = storage->get_copy();
+		void on_push(manager& manager, std::size_t, push_data_obj& in_data) override{
+			auto& storage = push_data_cast<T>(in_data);
+			data_ = storage.get_copy();
 			on_update();
 		}
 
@@ -393,14 +393,14 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		bool pull_arguments(typename base::arg_type& arguments, std::size_t target_index,
-			void* in_data){
+			push_data_obj* in_data){
 			bool any_failed{false};
 			[&, this]<std::size_t ... Idx>(std::index_sequence<Idx...>){
 				([&, this]<std::size_t I>(){
 					using Ty = std::tuple_element_t<I, typename base::arg_type>;
 					if(I == target_index){
-						auto* storage = static_cast<push_data_storage<Ty>*>(in_data);
-						std::get<I>(arguments) = storage->get();
+						auto& storage = push_data_cast<Ty>(*in_data);
+						std::get<I>(arguments) = storage.get();
 					} else{
 						if(auto& nptr = static_cast<const node_ptr&>(this->get_inputs()[I])){
 							node& n = *nptr;
@@ -418,11 +418,11 @@ namespace mo_yanxi::react_flow{
 		}
 
 	protected:
-		void on_push(manager& manager, std::size_t target_index, void* in_data) override{
+		void on_push(manager& manager, std::size_t target_index, push_data_obj& in_data) override{
 			switch(this->get_propagate_type()){
 			case propagate_behavior::eager :{
 				typename base::arg_type arguments{};
-				const bool any_failed = this->pull_arguments(arguments, target_index, in_data);
+				const bool any_failed = this->pull_arguments(arguments, target_index, &in_data);
 
 				if(any_failed){
 					this->mark_updated(-1);
@@ -518,7 +518,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 	protected:
-		void on_push(manager& manager, std::size_t slot, void* in_data) override{
+		void on_push(manager& manager, std::size_t slot, push_data_obj& in_data) override{
 			assert(slot < base::arg_count);
 			update_data(slot, in_data);
 
@@ -595,12 +595,12 @@ namespace mo_yanxi::react_flow{
 			return any_expired;
 		}
 
-		void update_data(std::size_t slot, void* in_data){
+		void update_data(std::size_t slot, push_data_obj& in_data){
 			dirty.set(slot, false);
 
 			[&, this]<std::size_t ... Idx>(std::index_sequence<Idx...>){
-				(void)((Idx == slot && (std::get<Idx>(arguments) = static_cast<push_data_storage<std::tuple_element_t<Idx, typename
-					base::arg_type>>*>(in_data)->get(), true)) || ...);
+				(void)((Idx == slot && (std::get<Idx>(arguments) = push_data_cast<std::tuple_element_t<Idx, typename
+					base::arg_type>>(in_data).get(), true)) || ...);
 			}(std::index_sequence_for<Args...>{});
 		}
 	};
@@ -669,16 +669,16 @@ namespace mo_yanxi::react_flow{
 			return this->operator()(input.fetch().value());
 		}
 
-		void on_push(manager& manager, std::size_t from_index, void* in_data) final{
+		void on_push(manager& manager, std::size_t from_index, push_data_obj& in_data) final{
 			assert(from_index == 0);
-			auto* storage = static_cast<push_data_storage<I>*>(in_data);
-			this->cache = this->operator()(storage->get());
+			auto& storage = push_data_cast<I>(in_data);
+			this->cache = this->operator()(storage.get());
 
 			switch(this->get_propagate_type()){
 			case propagate_behavior::eager :{
 				this->data_pending_state_ = data_pending_state::done;
 				push_data_storage<O> data(this->cache);
-				this->push_update(manager, std::addressof(data), this->get_out_socket_type_index());
+				this->push_update(manager, data, this->get_out_socket_type_index());
 				break;
 			}
 			case propagate_behavior::lazy :{
@@ -699,7 +699,7 @@ namespace mo_yanxi::react_flow{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
 			this->data_pending_state_ = data_pending_state::done;
 			push_data_storage<O> data(cache);
-			this->push_update(m, std::addressof(data), this->get_out_socket_type_index());
+			this->push_update(m, data, this->get_out_socket_type_index());
 		}
 
 		void disconnect_self_from_context() noexcept final{
