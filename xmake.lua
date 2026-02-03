@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-global
 add_rules("mode.debug", "mode.release")
 set_arch("x64")
 set_encodings("utf-8")
@@ -40,6 +41,14 @@ package(pkg_name)
 package_end()
 
 add_requires(pkg_name, {configs = {add_legacy = false, add_latest = false}})
+add_requires("gtest")
+
+
+if is_plat("linux") then
+    add_requireconfs("*", {configs = {cxflags = "-stdlib=libc++", ldflags = {"-stdlib=libc++", "-lc++abi", "-lunwind"}}})
+    add_cxflags("-stdlib=libc++")
+    add_ldflags("-stdlib=libc++", "-lc++abi", "-lunwind")
+end
 
 target("mo_yanxi.react_flow")
     set_kind("object")
@@ -78,6 +87,7 @@ target("mo_yanxi.react_flow.test")
     set_warnings("pedantic")
 
     add_deps("mo_yanxi.react_flow", {public = true})
+    add_packages("gtest")
     add_files("src/**.ixx", {public = true})
     add_files("test/**.cpp")
 target_end()
