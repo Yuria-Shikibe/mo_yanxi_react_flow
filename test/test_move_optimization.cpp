@@ -13,7 +13,8 @@ struct MoveTracker {
     static int copy_count;
     std::string value;
 
-    MoveTracker(std::string v = "") : value(std::move(v)) {}
+    MoveTracker() : value("") {}
+    MoveTracker(std::string v) : value(std::move(v)) {}
 
     MoveTracker(const MoveTracker& other) : value(other.value) {
         copy_count++;
@@ -59,7 +60,11 @@ struct TestListener : terminal<MoveTracker> {
         : terminal<MoveTracker>(pb), updated(u), name(std::move(n)) {}
 
     void on_update(const MoveTracker& data) override {
+        // Ignore initial synchronization where value is empty
+        if (data.value == "") return;
+
         updated = true;
+        EXPECT_EQ(data.value, "payload") << "Listener " << name << " received wrong value";
     }
 };
 
@@ -78,29 +83,33 @@ TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     trans.connect_successors(t);
 
     MoveTracker source("payload");
+    ASSERT_EQ(source.value, "payload");
 
-    // Reset counters before update
+    // Reset counters before main update to ignore connection noise
     MoveTracker::reset();
 
     p.update_value(std::move(source));
 
     EXPECT_TRUE(updated);
 
-    // Expected:
-    // 1. update_value (move)
-    // 2. provider -> trans (copy)
-    // 3. trans return (move)
-    // 4. trans -> storage (move) [Optimization!]
-    // 5. storage -> listener (move)
-
-    // Total Moves >= 4. Copies = 1.
-    // If optimization failed (storage held pointer):
-    // 4. trans -> storage (copy reference? or copy value?)
-    // 5. storage -> listener (copy)
-
-    // So checking high move count confirms optimization.
+    // Check counters BEFORE calling request() which adds copies
+    // Expected Moves:
+    // 1. p.update_value (move assign to cache)
+    // 2. trans return (move)
+    // 3. trans -> storage (move) [Optimization!]
+    // 4. storage -> listener (move)
+    // Total: 4 moves.
     EXPECT_GE(MoveTracker::move_count, 3) << "Expected at least 3 moves";
+
+    // Expected Copies:
+    // 1. provider -> trans arg (copy from cache)
+    // Total: 1 copy.
     EXPECT_EQ(MoveTracker::copy_count, 1) << "Expected exactly 1 copy (from provider cache)";
+
+    // Verify provider state (adds a copy)
+    auto cached_p = p.request(false);
+    ASSERT_TRUE(cached_p.has_value());
+    EXPECT_EQ(cached_p->value, "payload");
 }
 
 TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
@@ -121,7 +130,6 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
 
     p.connect_successors(trans);
 
-    // Order: T1, T2, T3
     trans.connect_successors(t1);
     trans.connect_successors(t2);
     trans.connect_successors(t3);
@@ -136,5 +144,13 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
     EXPECT_TRUE(t3_updated);
 
     // T1, T2 get copies. T3 gets move.
+    // Provider -> Trans: 1 copy.
+    // Trans return: 1 move.
+    // Trans -> Storage (T1): pointer (no copy/move yet) -> T1 get (copy).
+    // Trans -> Storage (T2): pointer (no copy/move yet) -> T2 get (copy).
+    // Trans -> Storage (T3): move (1 move) -> T3 get (move).
+    // Update value: 1 move.
+
+    // Total Moves: 1(update) + 1(ret) + 1(storage) + 1(get) = 4.
     EXPECT_GE(MoveTracker::move_count, 3);
 }
