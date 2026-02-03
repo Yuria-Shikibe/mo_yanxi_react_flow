@@ -674,7 +674,7 @@ namespace mo_yanxi::react_flow{
 
 		void update_cache(){
 			if(this->is_data_expired()){
-				if(auto rst = this->terminal<T>::template request_raw(false)){
+				if(auto rst = this->terminal<T>::request_raw(false)){
 					this->data_pending_state_ = data_pending_state::done;
 					cache_ = rst.value().fetch().value();
 					this->on_update(cache_);

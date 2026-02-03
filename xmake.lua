@@ -43,7 +43,6 @@ package_end()
 add_requires(pkg_name, {configs = {add_legacy = false, add_latest = false}})
 add_requires("gtest")
 
-
 if is_plat("linux") then
     add_requireconfs("*", {configs = {cxflags = "-stdlib=libc++", ldflags = {"-stdlib=libc++", "-lc++abi", "-lunwind"}}})
     add_cxflags("-stdlib=libc++")
