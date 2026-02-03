@@ -97,4 +97,4 @@ jobs:
           xmake -bvy ${{ env.TARGET_NAME }}
 
       - name: Test
-        run: xmake test
+        run: xmake run ${{ env.TARGET_NAME }}.test
