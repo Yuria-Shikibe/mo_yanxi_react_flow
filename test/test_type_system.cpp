@@ -27,6 +27,6 @@ TEST(TypeSystemTest, ImplicitConversionFails) {
     manager mgr;
     auto& p = mgr.add_node<provider_cached<int>>();
     auto& t = mgr.add_node(make_listener([](long){}));
-    
+
     EXPECT_THROW(p.connect_successors(t), invalid_node);
 }
