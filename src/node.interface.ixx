@@ -489,7 +489,7 @@ namespace mo_yanxi::react_flow{
 
 		void disconnect_self_from_context() noexcept final{
 			for(const auto& successor : successors){
-				successor.entity->disconnect_predecessor(successor.index, *this);
+				successor.entity->erase_predecessor_single_edge(successor.index, *this);
 			}
 			successors.clear();
 		}
