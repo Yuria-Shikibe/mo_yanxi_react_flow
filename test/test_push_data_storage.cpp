@@ -217,12 +217,12 @@ TEST(PushDataStorageTest, NonTrivial_ExceptionSafety) {
 
     // 验证 get() 抛出异常
     EXPECT_THROW({
-        empty_storage.get();
+        (void)empty_storage.get();
     }, std::runtime_error);
 
     // 验证 get_copy() 抛出异常
     EXPECT_THROW({
-        empty_storage.get_copy();
+        (void)empty_storage.get_copy();
     }, std::runtime_error);
 }
 
