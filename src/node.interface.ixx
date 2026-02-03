@@ -344,7 +344,7 @@ namespace mo_yanxi::react_flow{
 		 * The data flow is from source to terminal (push)
 		 *
 		 * @param manager
-		 * @param in_data_pass_by_copy ptr to const data, provided by parent
+		 * @param in_data ptr to const data, provided by parent
 		 */
 		virtual void on_push(manager& manager, std::size_t from_index, void* in_data){
 		}

@@ -667,6 +667,9 @@ namespace mo_yanxi::react_flow{
 
 namespace mo_yanxi::react_flow{
 	export
+	struct push_data_obj;
+
+	export
 	template <typename T>
 	class push_data_storage;
 
@@ -735,6 +738,10 @@ namespace mo_yanxi::react_flow{
 			return std::holds_alternative<std::monostate>(storage_);
 		}
 
+		explicit(false) constexpr operator push_data_obj&() noexcept {
+			return reinterpret_cast<push_data_obj&>(*this);
+		}
+
 	private:
 		variant_t storage_{};
 	};
@@ -772,7 +779,24 @@ namespace mo_yanxi::react_flow{
 			return value_;
 		}
 
+		explicit(false) constexpr operator push_data_obj&() noexcept {
+			return reinterpret_cast<push_data_obj&>(*this);
+		}
+
 	private:
 		T value_;
 	};
+
+	export
+	template <typename T>
+	push_data_storage<T>& push_data_cast(push_data_obj& obj) noexcept{
+		return reinterpret_cast<push_data_storage<T>&>(obj);
+	}
+
+	export
+	template <typename T>
+	const push_data_storage<T>& push_data_cast(const push_data_obj& obj) noexcept{
+		return reinterpret_cast<const push_data_storage<T>&>(obj);
+	}
+
 }
