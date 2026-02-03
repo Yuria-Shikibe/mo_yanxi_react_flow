@@ -42,8 +42,8 @@ jobs:
             toolchain: gcc
     #          - os: ubuntu-latest
     #            toolchain: msvc
-    #          - os: ubuntu-latest
-    #            toolchain: gcc
+          - os: ubuntu-latest
+            toolchain: gcc
 
 
     steps:
