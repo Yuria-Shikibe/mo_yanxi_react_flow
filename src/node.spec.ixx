@@ -210,7 +210,9 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool connect_successors_impl(std::size_t slot, node& post) final{
-			post.erase_predecessor_single_edge(slot, *post.get_inputs()[slot]);
+			if(auto& ptr = post.get_inputs()[slot]){
+				post.erase_predecessor_single_edge(slot, *ptr);
+			}
 			return node::try_insert(successors, slot, post);
 		}
 
@@ -698,7 +700,9 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		bool connect_successors_impl(std::size_t slot, node& post) final{
-			post.erase_predecessor_single_edge(slot, *post.get_inputs()[slot]);
+			if(auto& ptr = post.get_inputs()[slot]){
+				post.erase_predecessor_single_edge(slot, *ptr);
+			}
 			return node::try_insert(successors, slot, post);
 		}
 

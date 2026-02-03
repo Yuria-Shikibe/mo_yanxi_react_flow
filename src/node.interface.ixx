@@ -489,7 +489,7 @@ namespace mo_yanxi::react_flow{
 
 		void disconnect_self_from_context() noexcept final{
 			for(const auto& successor : successors){
-				successor.entity->disconnect_predecessor(successor.index, *this);
+				successor.entity->erase_predecessor_single_edge(successor.index, *this);
 			}
 			successors.clear();
 		}
@@ -504,7 +504,9 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool connect_successors_impl(const std::size_t slot, node& post) final{
-			post.erase_predecessor_single_edge(slot, *post.get_inputs()[slot]);
+			if(auto& ptr = post.get_inputs()[slot]){
+				post.erase_predecessor_single_edge(slot, *ptr);
+			}
 			return node::try_insert(successors, slot, post);
 		}
 
