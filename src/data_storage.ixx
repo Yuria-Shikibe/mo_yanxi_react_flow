@@ -667,7 +667,7 @@ namespace mo_yanxi::react_flow{
 
 namespace mo_yanxi::react_flow{
 	export
-	struct push_data_obj;
+	struct push_data_obj{};
 
 	export
 	template <typename T>
