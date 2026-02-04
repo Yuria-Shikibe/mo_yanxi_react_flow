@@ -59,13 +59,13 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
     struct my_cached_node : modifier_argument_cached<int, int> {
         using modifier_argument_cached::modifier_argument_cached;
         int* counter;
-        std::optional<int> operator()(const std::stop_token&, const int& arg) override {
+        std::optional<int> operator()(const int& arg) override {
             (*counter)++;
             return arg;
         }
     };
     
-    auto& downstream_cached = mgr.add_node<my_cached_node>(propagate_behavior::lazy, async_type::none);
+    auto& downstream_cached = mgr.add_node<my_cached_node>(propagate_behavior::lazy);
     downstream_cached.counter = &cached_compute_count;
     
     upstream.connect_successors(downstream_cached);

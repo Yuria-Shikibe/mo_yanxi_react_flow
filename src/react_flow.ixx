@@ -41,11 +41,12 @@ void connect_chain(const Rng& chain){
 void example(){
 	manager manager{};
 
-	struct modifier_str_to_num : modifier_transient<int, std::string>{
-		using modifier_transient::modifier_transient;
+	struct modifier_str_to_num : async_node_transient<int, std::string>{
+		using async_node_transient::async_node_transient;
 	protected:
-		std::optional<int> operator()(const std::stop_token& stop_token, const std::string& arg) override{
+		std::optional<int> operator()(const async_context& ctx, const std::string& arg) override{
 			int val{};
+			auto stop_token = ctx.get_stop_token();
 
 			for(int i = 0; i < 4; ++i){
 				if(stop_token.stop_requested()){
@@ -65,7 +66,7 @@ void example(){
 	struct modifier_num_to_num : modifier_argument_cached<int, int>{
 		using modifier_argument_cached::modifier_argument_cached;
 	protected:
-		std::optional<int> operator()(const std::stop_token& stop_token, const int& arg) override{
+		std::optional<int> operator()(const int& arg) override{
 			return -arg;
 		}
 	};
@@ -89,7 +90,7 @@ void example(){
 
 	auto& p  = manager.add_node<provider_cached<std::string>>();
 	auto& m0 = manager.add_node<modifier_str_to_num>(async_type::async_latest);
-	auto& m1 = manager.add_node<modifier_num_to_num>(async_type::none, true);
+	auto& m1 = manager.add_node<modifier_num_to_num>(propagate_behavior::eager);
 	auto& t0 = manager.add_node<printer>("Str To Num(delay 5s)");
 	auto& t1 = manager.add_node<printer>("Negate of Num");
 
