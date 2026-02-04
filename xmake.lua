@@ -23,6 +23,7 @@ package(pkg_name)
     else
         add_urls("https://github.com/Yuria-Shikibe/mo_yanxi_utility.git")
     end
+    add_versions("pinned", "c71daf6d0cfbca9fff508cb2bc0c1eea60da734d")
 
     set_policy("platform.longpaths", true)
     add_configs("add_legacy", {description = "Use Legacy Components.", default = false, type = "boolean"})
@@ -40,7 +41,7 @@ package(pkg_name)
     end)
 package_end()
 
-add_requires(pkg_name, {configs = {add_legacy = false, add_latest = false}})
+add_requires(pkg_name, {version = "pinned", configs = {add_legacy = false, add_latest = false}})
 add_requires("gtest")
 
 if is_plat("linux") then
