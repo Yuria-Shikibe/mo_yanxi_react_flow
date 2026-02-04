@@ -84,6 +84,17 @@ namespace mo_yanxi::react_flow{
 		def = async_latest
 	};
 
+	export enum struct trigger_type : std::uint8_t{
+		disabled,
+		on_pulse,
+		active
+	};
+
+	export struct async_context{
+		std::stop_token stop_token;
+		void* task;
+	};
+
 	export enum struct propagate_behavior : std::uint8_t{
 		eager,
 		lazy,
