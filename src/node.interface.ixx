@@ -134,10 +134,15 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] successor_entry() = default;
 
-		[[nodiscard]] successor_entry(const std::size_t index, node& entity)
-			: index(index),
-			entity(std::addressof(entity)){
-		}
+		[[nodiscard]] successor_entry(const std::size_t index, node& entity);
+
+		successor_entry(const successor_entry& other);
+		successor_entry(successor_entry&& other) noexcept;
+
+		successor_entry& operator=(const successor_entry& other);
+		successor_entry& operator=(successor_entry&& other) noexcept;
+
+		~successor_entry();
 
 		[[nodiscard]] node* get() const noexcept{
 			return entity;
@@ -172,6 +177,20 @@ namespace mo_yanxi::react_flow{
 		template <typename T>
 		friend struct intermediate_cache;
 
+	private:
+		std::atomic<std::size_t> ref_count_{0};
+
+	public:
+		void retain() noexcept{
+			ref_count_.fetch_add(1, std::memory_order_relaxed);
+		}
+
+		void release() noexcept{
+			if(ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 1){
+				delete this;
+			}
+		}
+
 	protected:
 		propagate_behavior data_propagate_type_{};
 		data_pending_state data_pending_state_{};
@@ -181,6 +200,34 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] explicit node(propagate_behavior data_propagate_type)
 			: data_propagate_type_(data_propagate_type){
+		}
+
+		[[nodiscard]] node(const node& other)
+			: data_propagate_type_(other.data_propagate_type_),
+			  data_pending_state_(other.data_pending_state_),
+			  ref_count_(0){
+		}
+
+		[[nodiscard]] node(node&& other) noexcept
+			: data_propagate_type_(other.data_propagate_type_),
+			  data_pending_state_(other.data_pending_state_),
+			  ref_count_(0){
+		}
+
+		node& operator=(const node& other){
+			if(this != &other){
+				data_propagate_type_ = other.data_propagate_type_;
+				data_pending_state_ = other.data_pending_state_;
+			}
+			return *this;
+		}
+
+		node& operator=(node&& other) noexcept{
+			if(this != &other){
+				data_propagate_type_ = other.data_propagate_type_;
+				data_pending_state_ = other.data_pending_state_;
+			}
+			return *this;
 		}
 
 		virtual ~node() = default;
@@ -379,6 +426,129 @@ namespace mo_yanxi::react_flow{
 			});
 		}
 	};
+
+	export
+	struct node_pointer{
+	private:
+		node* ptr_{};
+
+	public:
+		using pointer = node*;
+		using element_type = node;
+
+		[[nodiscard]] node_pointer() = default;
+
+		[[nodiscard]] node_pointer(std::nullptr_t) noexcept{
+		}
+
+		explicit node_pointer(node* p) : ptr_(p){
+			if(ptr_) ptr_->retain();
+		}
+
+		node_pointer(const node_pointer& other) : ptr_(other.ptr_){
+			if(ptr_) ptr_->retain();
+		}
+
+		node_pointer(node_pointer&& other) noexcept : ptr_(other.ptr_){
+			other.ptr_ = nullptr;
+		}
+
+		node_pointer& operator=(const node_pointer& other){
+			if(this != &other){
+				node* old = ptr_;
+				ptr_ = other.ptr_;
+				if(ptr_) ptr_->retain();
+				if(old) old->release();
+			}
+			return *this;
+		}
+
+		node_pointer& operator=(node_pointer&& other) noexcept{
+			if(this != &other){
+				node* old = ptr_;
+				ptr_ = other.ptr_;
+				other.ptr_ = nullptr;
+				if(old) old->release();
+			}
+			return *this;
+		}
+
+        node_pointer& operator=(std::nullptr_t) noexcept{
+            if(ptr_){
+                ptr_->release();
+                ptr_ = nullptr;
+            }
+            return *this;
+        }
+
+		~node_pointer(){
+			if(ptr_) ptr_->release();
+		}
+
+		template <typename T, typename... Args>
+		explicit node_pointer(std::in_place_type_t<T>, Args&&... args){
+			ptr_ = new T(std::forward<Args>(args)...);
+			ptr_->retain();
+		}
+
+		[[nodiscard]] node* get() const noexcept{
+			return ptr_;
+		}
+
+		[[nodiscard]] node* operator->() const noexcept{
+			return ptr_;
+		}
+
+		[[nodiscard]] node& operator*() const noexcept{
+			return *ptr_;
+		}
+
+		explicit operator bool() const noexcept{
+			return ptr_ != nullptr;
+		}
+
+        bool operator==(const node_pointer& other) const noexcept { return ptr_ == other.ptr_; }
+        bool operator==(std::nullptr_t) const noexcept { return ptr_ == nullptr; }
+	};
+
+	successor_entry::successor_entry(const std::size_t index, node& entity)
+		: index(index), entity(&entity){
+		entity.retain();
+	}
+
+	successor_entry::successor_entry(const successor_entry& other)
+		: index(other.index), entity(other.entity){
+		if(entity) entity->retain();
+	}
+
+	successor_entry::successor_entry(successor_entry&& other) noexcept
+		: index(other.index), entity(other.entity){
+		other.entity = nullptr;
+	}
+
+	successor_entry& successor_entry::operator=(const successor_entry& other){
+		if(this != &other){
+			if(entity) entity->release();
+			index = other.index;
+			entity = other.entity;
+			if(entity) entity->retain();
+		}
+		return *this;
+	}
+
+	successor_entry& successor_entry::operator=(successor_entry&& other) noexcept{
+		if(this != &other){
+			if(entity) entity->release();
+			index = other.index;
+			entity = other.entity;
+			other.entity = nullptr;
+		}
+		return *this;
+	}
+
+	successor_entry::~successor_entry(){
+		if(entity) entity->release();
+	}
 
 	export
 	template <typename T>

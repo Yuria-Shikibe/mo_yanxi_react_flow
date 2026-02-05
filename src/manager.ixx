@@ -106,7 +106,7 @@ namespace mo_yanxi::react_flow{
 	struct node_deleter{
 		static void operator()(node* pnode) noexcept{
 			pnode->disconnect_self_from_context();
-			delete pnode;
+			pnode->release();
 		}
 	};
 
@@ -115,6 +115,7 @@ namespace mo_yanxi::react_flow{
 			requires (std::constructible_from<T, Args&&...>)
 		explicit(false) node_p(std::in_place_type_t<T>, Args&&... args) : std::unique_ptr<node, node_deleter>(
 			new T(std::forward<Args>(args)...), node_deleter{}){
+			this->get()->retain();
 		}
 	};
 

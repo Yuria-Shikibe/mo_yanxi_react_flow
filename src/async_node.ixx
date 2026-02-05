@@ -360,6 +360,11 @@ namespace mo_yanxi::react_flow{
 		[[nodiscard]] explicit async_node_task(type& modifier, std::span<successor_entry> subscribers_, std::tuple<Args...>&& args) :
 			progressed_async_node_base{!subscribers_.empty()},
 			modifier_(std::addressof(modifier)), arguments_{std::move(args)}, progress_subscribers_(std::from_range, subscribers_){
+			modifier_->retain();
+		}
+
+		~async_node_task() override{
+			if(modifier_) modifier_->release();
 		}
 
 		void on_finish(manager& manager) override{
