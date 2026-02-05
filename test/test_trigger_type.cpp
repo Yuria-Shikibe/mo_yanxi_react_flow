@@ -15,7 +15,7 @@ TEST(TriggerTypeTest, Disabled) {
     }));
 
     // Access async_node interface
-    auto& async_n = dynamic_cast<async_node_base<int, int>&>(node);
+    auto& async_n = dynamic_cast<async_node<int, int>&>(node);
     async_n.set_trigger_type(trigger_type::disabled);
 
     p.connect_successors(node);
@@ -42,8 +42,7 @@ TEST(TriggerTypeTest, OnPulse) {
         return v;
     }));
 
-    auto& async_n = dynamic_cast<async_node_base<int, int>&>(node);
-    async_n.set_trigger_type(trigger_type::on_pulse);
+    node.set_trigger_type(trigger_type::on_pulse);
 
     p.connect_successors(node);
 
@@ -56,7 +55,7 @@ TEST(TriggerTypeTest, OnPulse) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     EXPECT_EQ(count, 1);
-    EXPECT_EQ(async_n.get_trigger_type(), trigger_type::disabled);
+    EXPECT_EQ(node.get_trigger_type(), trigger_type::disabled);
 
     // Update again
     p.update_value(2);
@@ -79,8 +78,7 @@ TEST(TriggerTypeTest, OnPulseDelayed) {
         return v;
     }));
 
-    auto& async_n = dynamic_cast<async_node_base<int, int>&>(node);
-    async_n.set_trigger_type(trigger_type::on_pulse);
+    node.set_trigger_type(trigger_type::on_pulse);
 
     p.connect_successors(node);
 
@@ -91,7 +89,7 @@ TEST(TriggerTypeTest, OnPulseDelayed) {
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
     EXPECT_EQ(count, 0);
-    EXPECT_EQ(async_n.get_trigger_type(), trigger_type::on_pulse);
+    EXPECT_EQ(node.get_trigger_type(), trigger_type::on_pulse);
 
     mgr.update(); // Manager update triggers pulse
     // Does it trigger pulse?
@@ -127,5 +125,5 @@ TEST(TriggerTypeTest, OnPulseDelayed) {
     }
 
     EXPECT_EQ(count, 1);
-    EXPECT_EQ(async_n.get_trigger_type(), trigger_type::disabled);
+    EXPECT_EQ(node.get_trigger_type(), trigger_type::disabled);
 }

@@ -83,7 +83,7 @@ namespace mo_yanxi::react_flow{
 			this->data_pending_state_ = data_pending_state::done;
 			push_data_storage<T> data(data_);
 			for(const successor_entry& successor : this->successors){
-				successor.update(*this->manager_, data);
+				successor.update(m, data);
 			}
 		}
 
@@ -675,11 +675,7 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename Fn>
 	auto make_transformer(propagate_behavior data_propagate_type, Fn&& fn){
-		using args_t = typename function_traits<std::remove_cvref_t<Fn>>::mem_func_args_type;
-		if constexpr (is_async_tuple<args_t>::value) {
-			return async_transformer_unambiguous<Fn>{data_propagate_type, async_type::none, std::forward<Fn>(fn)};
-		} else {
-			return transformer_unambiguous<Fn>{data_propagate_type, std::forward<Fn>(fn)};
-		}
+		return transformer_unambiguous<Fn>{data_propagate_type, std::forward<Fn>(fn)};
+
 	}
 }

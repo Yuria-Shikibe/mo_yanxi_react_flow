@@ -67,11 +67,6 @@ namespace mo_yanxi::react_flow{
 
 	export enum struct async_type : std::uint8_t{
 		/**
-		 * @brief the modifier is synchronized
-		 */
-		none,
-
-		/**
 		 * @brief When a new update is arrived and the previous is not done yet, cancel the previous
 		 */
 		async_latest,
@@ -88,11 +83,6 @@ namespace mo_yanxi::react_flow{
 		disabled,
 		on_pulse,
 		active
-	};
-
-	export struct async_context{
-		std::stop_token stop_token;
-		void* task;
 	};
 
 	export enum struct propagate_behavior : std::uint8_t{
@@ -452,6 +442,7 @@ namespace mo_yanxi::react_flow{
 		 * @param allow_expired
 		 */
 		virtual request_pass_handle<T> request_raw(bool allow_expired) = 0;
+
 	};
 
 	export
@@ -711,6 +702,25 @@ namespace mo_yanxi::react_flow{
 		}
 	};
 
+	template <typename T>
+	void successor_entry::update(manager& manager, push_data_storage<T>& data) const{
+		assert(unstable_type_identity_of<T>() == entity->get_in_socket_type_index()[index]);
+		entity->on_push(manager, index, data);
+	}
+
+	void successor_entry::update(manager& manager, push_data_obj& data, data_type_index checker) const{
+#if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
+		if(entity->get_in_socket_type_index()[index] != checker){
+			throw invalid_node{"Type Mismatch on update"};
+		}
+#endif
+		entity->on_push(manager, index, data);
+	}
+
+	void successor_entry::mark_updated() const{
+		entity->mark_updated(index);
+	}
+
 
 	bool is_reachable(const node* start_node, const node* target_node, std::unordered_set<const node*>& visited){
 		if(start_node == nullptr) return false;
@@ -729,25 +739,6 @@ namespace mo_yanxi::react_flow{
 		}
 
 		return false;
-	}
-
-	template <typename T>
-	void successor_entry::update(manager& manager, push_data_storage<T>& data) const{
-		assert(unstable_type_identity_of<T>() == entity->get_in_socket_type_index()[index]);
-		entity->on_push(manager, index, data);
-	}
-
-	void successor_entry::update(manager& manager, push_data_obj& data, data_type_index checker) const{
-#if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
-		if(entity->get_in_socket_type_index()[index] != checker){
-			throw invalid_node{"Type Mismatch on update"};
-		}
-#endif
-		entity->on_push(manager, index, data);
-	}
-
-	void successor_entry::mark_updated() const{
-		entity->mark_updated(index);
 	}
 
 	bool is_ring_bridge(const node* self, const node* successors){

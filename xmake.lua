@@ -22,7 +22,6 @@ package(pkg_name)
         set_sourcedir("../mo_yanxi_utility")
     else
         add_urls("https://github.com/Yuria-Shikibe/mo_yanxi_utility.git")
-        add_versions("c71daf6", "c71daf6d0cfbca9fff508cb2bc0c1eea60da734d")
     end
 
     set_policy("platform.longpaths", true)
@@ -36,12 +35,10 @@ package(pkg_name)
         configs.add_legacy = package:config("add_legacy")
 
         import("package.tools.xmake").install(package, configs)
-        os.cp("include/**.hpp", package:installdir("include"), {rootdir = "include"})
-
     end)
 package_end()
 
-add_requires(pkg_name, {version = "c71daf6", configs = {add_legacy = false, add_latest = false}})
+add_requires(pkg_name, {configs = {add_legacy = false, add_latest = false}})
 add_requires("gtest")
 
 if is_plat("linux") then
@@ -88,7 +85,6 @@ target("mo_yanxi.react_flow.test")
 
     add_deps("mo_yanxi.react_flow", {public = true})
     add_packages("gtest")
-    add_files("src/**.ixx", {public = true})
     add_files("test/**.cpp")
 target_end()
 

@@ -72,7 +72,7 @@ TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     manager mgr;
     auto& p = mgr.add_node<provider_cached<MoveTracker>>();
 
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, async_type::none, [&](MoveTracker v){
+    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
         return v;
     }));
 
@@ -116,7 +116,7 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
     manager mgr;
     auto& p = mgr.add_node<provider_cached<MoveTracker>>();
 
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, async_type::none, [&](MoveTracker v){
+    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
         return v;
     }));
 

@@ -42,14 +42,14 @@ void connect_chain(const Rng& chain){
 void example(){
 	manager manager{};
 
-	struct modifier_str_to_num : async_node_transient<int, std::string>{
-		using async_node_transient::async_node_transient;
+	struct modifier_str_to_num : async_node<int, std::string>{
+		using async_node::async_node;
 	protected:
-		std::optional<int> operator()(const async_context& ctx, const std::string& arg) override{
+		std::optional<int> operator()(const async_context& ctx, std::string&& arg) override{
 			int val{};
 
 			for(int i = 0; i < 4; ++i){
-				if(ctx.stop_token.stop_requested()){
+				if(ctx.node_stop_token.stop_requested()){
 					return std::nullopt;
 				}
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));

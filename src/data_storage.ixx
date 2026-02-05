@@ -704,7 +704,7 @@ namespace mo_yanxi::react_flow{
 		constexpr push_data_storage(const push_data_storage&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
 		constexpr push_data_storage& operator=(const push_data_storage&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
 
-		[[nodiscard]] constexpr T get() noexcept(std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_move_constructible_v<T>){
+		[[nodiscard]] constexpr T get(){
 			if(std::holds_alternative<T>(storage_)){
 				T ret = std::move(std::get<T>(storage_));
 				storage_ = std::monostate{};
