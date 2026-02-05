@@ -273,7 +273,7 @@ namespace mo_yanxi::react_flow{
 
 
 			auto cur = under_processing_.load(std::memory_order_acquire);
-			if(cur->check_during_update_)cur->on_update_check(*this);
+			if(cur && cur->check_during_update_)cur->on_update_check(*this);
 
 
 			{
@@ -318,8 +318,12 @@ namespace mo_yanxi::react_flow{
 				if(task){
 					manager.under_processing_.store(task.value().get(), std::memory_order_release);
 					task.value()->execute();
-					std::lock_guard lg{manager.done_mutex_};
-					manager.done_[1].push_back(std::move(task.value()));
+					{
+						std::lock_guard lg{manager.done_mutex_};
+						manager.done_[1].push_back(std::move(task.value()));
+					}
+					manager.under_processing_.store(nullptr, std::memory_order_release);
+
 				} else{
 					return;
 				}
