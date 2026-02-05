@@ -30,7 +30,7 @@ TEST(PropagationTest, LazyPropagation) {
     
     int computation_count = 0;
     // transformer with lazy behavior
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::lazy, async_type::none, [&](int v){
+    auto& trans = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
         computation_count++;
         return v * 2;
     }));

@@ -21,7 +21,7 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
     
     int upstream_compute_count = 0;
     // Upstream node that counts computations
-    auto& upstream = mgr.add_node(make_transformer(propagate_behavior::lazy, async_type::none, [&](int v){
+    auto& upstream = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
         upstream_compute_count++;
         return v;
     }));
@@ -30,7 +30,7 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
     
     // Case 1: Transient downstream
     int transient_compute_count = 0;
-    auto& downstream_transient = mgr.add_node(make_transformer(propagate_behavior::lazy, async_type::none, [&](int v){
+    auto& downstream_transient = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
         transient_compute_count++;
         return v;
     }));
@@ -59,13 +59,13 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
     struct my_cached_node : modifier_argument_cached<int, int> {
         using modifier_argument_cached::modifier_argument_cached;
         int* counter;
-        std::optional<int> operator()(const std::stop_token&, const int& arg) override {
+        int operator()(const int& arg) override {
             (*counter)++;
             return arg;
         }
     };
     
-    auto& downstream_cached = mgr.add_node<my_cached_node>(propagate_behavior::lazy, async_type::none);
+    auto& downstream_cached = mgr.add_node<my_cached_node>(propagate_behavior::lazy);
     downstream_cached.counter = &cached_compute_count;
     
     upstream.connect_successors(downstream_cached);
@@ -91,7 +91,7 @@ TEST(CachingTest, TerminalCached) {
     auto& p = mgr.add_node<provider_cached<int>>();
     
     int compute_count = 0;
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::lazy, async_type::none, [&](int v){
+    auto& trans = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
         compute_count++;
         return v;
     }));

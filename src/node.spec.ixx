@@ -6,6 +6,7 @@ export module mo_yanxi.react_flow:nodes;
 
 import :manager;
 import :node_interface;
+import :async_nodes;
 
 import mo_yanxi.meta_programming;
 import std;
@@ -110,10 +111,6 @@ namespace mo_yanxi::react_flow{
 
 	//TODO provider transient?
 
-	template <typename T, typename... Args>
-	struct modifier_async_task;
-
-
 	template <typename Ret, typename... Args>
 	struct modifier_base : type_aware_node<Ret>{
 		static_assert((std::is_object_v<Args> && ...) && std::is_object_v<Ret>);
@@ -128,45 +125,11 @@ namespace mo_yanxi::react_flow{
 		std::array<node_ptr, arg_count> parents{};
 		std::vector<successor_entry> successors{};
 
-		async_type async_type_{};
-		std::size_t dispatched_count_{};
-		std::stop_source stop_source_{std::nostopstate};
-
 	public:
 		[[nodiscard]] modifier_base() = default;
 
-		[[nodiscard]] explicit modifier_base(async_type async_type)
-			: async_type_(async_type){
-		}
-
-		[[nodiscard]] explicit modifier_base(propagate_behavior data_propagate_type, async_type async_type)
-			: type_aware_node<Ret>(data_propagate_type), async_type_(async_type){
-		}
-
-		[[nodiscard]] std::size_t get_dispatched() const noexcept{
-			return dispatched_count_;
-		}
-
-		[[nodiscard]] async_type get_async_type() const noexcept{
-			return async_type_;
-		}
-
-		void set_async_type(const async_type async_type) noexcept{
-			async_type_ = async_type;
-		}
-
-		[[nodiscard]] std::stop_token get_stop_token() const noexcept{
-			assert(stop_source_.stop_possible());
-			return stop_source_.get_token();
-		}
-
-		bool async_cancel() noexcept{
-			if(async_type_ == async_type::none) return false;
-			if(dispatched_count_ == 0) return false;
-			if(!stop_source_.stop_possible()) return false;
-			stop_source_.request_stop();
-			stop_source_ = std::stop_source{std::nostopstate};
-			return true;
+		[[nodiscard]] explicit modifier_base(propagate_behavior data_propagate_type)
+			: type_aware_node<Ret>(data_propagate_type){
 		}
 
 		[[nodiscard]] bool is_isolated() const noexcept override{
@@ -209,10 +172,6 @@ namespace mo_yanxi::react_flow{
 		}
 
 	private:
-		void async_resume(manager& manager, Ret& data) const{
-			this->update_children(manager, data);
-		}
-
 		bool connect_successors_impl(std::size_t slot, node& post) final{
 			if(auto& ptr = post.get_inputs()[slot]){
 				post.erase_predecessor_single_edge(slot, *ptr);
@@ -241,31 +200,6 @@ namespace mo_yanxi::react_flow{
 		}
 
 	protected:
-		void async_launch(manager& manager){
-			if(async_type_ == async_type::none){
-				throw std::logic_error("async_launch on a synchronized object");
-			}
-
-			if(stop_source_.stop_possible()){
-				if(async_type_ == async_type::async_latest){
-					if(async_cancel()){
-						//only reset when really requested stop
-						stop_source_ = {};
-					}
-				}
-			} else if(!stop_source_.stop_requested()){
-				//stop source empty
-				stop_source_ = {};
-			}
-
-			++dispatched_count_;
-
-			arg_type arguments{};
-			if(auto rst = this->load_argument_to(arguments, true); rst != data_state::failed){
-				manager.push_task(std::make_unique<modifier_async_task<Ret, Args...>>(*this, std::move(arguments)));
-			}
-		}
-
 		virtual void update_children(manager& manager, Ret& val) const{
 			std::size_t count = this->successors.size();
 			for(std::size_t i = 0; i < count; ++i){
@@ -279,25 +213,23 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
-		std::optional<Ret> apply(const std::stop_token& stop_token, arg_type&& arguments){
-			return [&, this]<std::size_t... Idx>(std::index_sequence<Idx...>) -> std::optional<Ret>{
-				return this->operator()(stop_token, std::move(std::get<Idx>(arguments))...);
+		Ret apply(arg_type&& arguments){
+			return [&, this]<std::size_t... Idx>(std::index_sequence<Idx...>) -> Ret{
+				return this->operator()(std::move(std::get<Idx>(arguments))...);
 			}(std::index_sequence_for<Args...>());
 		}
 
-		std::optional<Ret> apply(const std::stop_token& stop_token, const arg_type& arguments){
-			return [&, this]<std::size_t... Idx>(std::index_sequence<Idx...>) -> std::optional<Ret>{
-				return this->operator()(stop_token, std::get<Idx>(arguments)...);
+		Ret apply(const arg_type& arguments){
+			return [&, this]<std::size_t... Idx>(std::index_sequence<Idx...>) -> Ret{
+				return this->operator()(std::get<Idx>(arguments)...);
 			}(std::index_sequence_for<Args...>());
 		}
 
-		//TODO support which changed?
-
-		virtual std::optional<Ret> operator()(const std::stop_token& stop_token, Args&&... args){
-			return this->operator()(stop_token, std::as_const(args)...);
+		virtual Ret operator()(Args&&... args){
+			return this->operator()(std::as_const(args)...);
 		}
 
-		virtual std::optional<Ret> operator()(const std::stop_token& stop_token, const Args&... args) = 0;
+		virtual Ret operator()(const Args&... args) = 0;
 
 		virtual data_state load_argument_to(arg_type& arguments, bool allow_expired){
 			bool any_expired = false;
@@ -320,42 +252,6 @@ namespace mo_yanxi::react_flow{
 			if(!success) return data_state::failed;
 			return any_expired ? data_state::expired : data_state::fresh;
 		}
-
-		friend modifier_async_task<Ret, Args...>;
-	};
-
-	template <typename T, typename... Args>
-	struct modifier_async_task final : async_task_base{
-	private:
-		using type = modifier_base<T, Args...>;
-		type* modifier_{};
-		std::stop_token stop_token_{};
-
-		std::tuple<Args...> arguments_{};
-		std::optional<T> rst_cache_{};
-
-	public:
-		[[nodiscard]] explicit modifier_async_task(type& modifier, std::tuple<Args...>&& args) :
-			modifier_(std::addressof(modifier)),
-			stop_token_(modifier.get_stop_token()), arguments_{std::move(args)}{
-		}
-
-		void on_finish(manager& manager) override{
-			--modifier_->dispatched_count_;
-
-			if(rst_cache_){
-				modifier_->async_resume(manager, rst_cache_.value());
-			}
-		}
-
-		node* get_owner_if_node() noexcept override{
-			return modifier_;
-		}
-
-	private:
-		void execute() override{
-			rst_cache_ = modifier_->apply(stop_token_, std::move(arguments_));
-		}
 	};
 
 	export
@@ -368,23 +264,14 @@ namespace mo_yanxi::react_flow{
 		using base::modifier_base;
 
 		request_pass_handle<Ret> request_raw(bool allow_expired) override{
-			if(this->get_async_type() != async_type::none){
-				if(this->get_dispatched() > 0){
-					return make_request_handle_unexpected<Ret>(data_state::awaiting);
-				} else{
-					return make_request_handle_unexpected<Ret>(data_state::failed);
-				}
-			}
-
 			typename base::arg_type arguments;
 			auto rst = this->load_argument_to(arguments, allow_expired);
 			if(rst != data_state::failed){
 				if(rst != data_state::expired || allow_expired){
-					if(auto return_value = this->apply({}, std::move(arguments))){
-						this->data_pending_state_ = data_pending_state::done;
-						return react_flow::make_request_handle_expected(std::move(return_value).value(),
-							rst == data_state::expired);
-					}
+					auto return_value = this->apply(std::move(arguments));
+					this->data_pending_state_ = data_pending_state::done;
+					return react_flow::make_request_handle_expected(std::move(return_value),
+						rst == data_state::expired);
 				}
 			}
 
@@ -430,14 +317,8 @@ namespace mo_yanxi::react_flow{
 				}
 
 				this->data_pending_state_ = data_pending_state::done;
-				if(this->get_async_type() == async_type::none){
-					if(auto cur = this->apply({}, std::move(arguments))){
-						this->base::update_children(manager, *cur);
-					}
-				} else{
-					//TODO should children be marked as expired?
-					this->async_launch(manager);
-				}
+				auto cur = this->apply(std::move(arguments));
+				this->base::update_children(manager, cur);
 				break;
 			}
 			case propagate_behavior::lazy :{
@@ -463,14 +344,8 @@ namespace mo_yanxi::react_flow{
 			}
 
 			this->data_pending_state_ = data_pending_state::done;
-			if(this->get_async_type() == async_type::none){
-				if(auto cur = this->apply({}, std::move(arguments))){
-					this->base::update_children(m, *cur);
-				}
-			} else{
-				//TODO should children be marked as expired?
-				this->async_launch(m);
-			}
+			auto cur = this->apply(std::move(arguments));
+			this->base::update_children(m, cur);
 		}
 	};
 
@@ -495,23 +370,12 @@ namespace mo_yanxi::react_flow{
 		}
 
 		request_pass_handle<Ret> request_raw(bool allow_expired) override{
-			if(this->get_async_type() != async_type::none){
-				if(this->get_dispatched() > 0){
-					return make_request_handle_unexpected<Ret>(data_state::awaiting);
-				} else{
-					return make_request_handle_unexpected<Ret>(data_state::failed);
-				}
-			}
-
 			auto expired = update_arguments();
 
 			if(!expired || allow_expired){
-				if(auto return_value = this->apply({}, arguments)){
-					this->data_pending_state_ = data_pending_state::done;
-					return react_flow::make_request_handle_expected(std::move(return_value).value(), expired);
-				} else{
-					return make_request_handle_unexpected<Ret>(data_state::failed);
-				}
+				auto return_value = this->apply(arguments);
+				this->data_pending_state_ = data_pending_state::done;
+				return react_flow::make_request_handle_expected(std::move(return_value), expired);
 			}
 
 			return make_request_handle_unexpected<Ret>(data_state::expired);
@@ -524,13 +388,8 @@ namespace mo_yanxi::react_flow{
 
 			switch(this->get_propagate_type()){
 			case propagate_behavior::eager :{
-				if(this->get_async_type() == async_type::none){
-					if(auto cur = this->apply({}, arguments)){
-						this->base::update_children(manager, *cur);
-					}
-				} else{
-					this->async_launch(manager);
-				}
+				auto cur = this->apply(arguments);
+				this->base::update_children(manager, cur);
 				break;
 			}
 			case propagate_behavior::lazy :{
@@ -566,13 +425,8 @@ namespace mo_yanxi::react_flow{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
 
 			this->data_pending_state_ = data_pending_state::done;
-			if(this->get_async_type() == async_type::none){
-				if(auto cur = this->apply({}, arguments)){
-					this->base::update_children(m, *cur);
-				}
-			} else{
-				this->async_launch(m);
-			}
+			auto cur = this->apply(arguments);
+			this->base::update_children(m, cur);
 		}
 
 	private:
@@ -754,25 +608,9 @@ namespace mo_yanxi::react_flow{
 	};
 
 
-	template <typename T>
-	struct optional_value_type : std::type_identity<T>{
-	};
-
-	template <typename T>
-	struct optional_value_type<std::optional<T>> : std::type_identity<T>{
-	};
-
-	template <typename T>
-	using optional_value_type_t = typename optional_value_type<T>::type;
-
 	template <typename Fn, typename... Args>
 	consteval auto test_invoke_result(){
-		if constexpr(std::invocable<Fn, const std::stop_token&, Args&&...>){
-			return std::type_identity<optional_value_type_t<std::invoke_result_t<Fn, const std::stop_token&, Args...>>>
-				{};
-		} else{
-			return std::type_identity<optional_value_type_t<std::invoke_result_t<Fn, Args...>>>{};
-		}
+		return std::type_identity<std::invoke_result_t<Fn, Args...>>{};
 	}
 
 	//TODO allow optional<T&> one day...
@@ -788,37 +626,23 @@ namespace mo_yanxi::react_flow{
 		Fn fn;
 
 	public:
-		[[nodiscard]] explicit transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn)
-			: transformer_base_t<Fn, Args...>(data_propagate_type, async_type), fn(std::move(fn)){
+		[[nodiscard]] explicit transformer(propagate_behavior data_propagate_type, Fn&& fn)
+			: transformer_base_t<Fn, Args...>(data_propagate_type), fn(std::move(fn)){
 		}
 
-		[[nodiscard]] explicit transformer(propagate_behavior data_propagate_type, async_type async_type, const Fn& fn)
-			: transformer_base_t<Fn, Args...>(data_propagate_type, async_type), fn(fn){
+		[[nodiscard]] explicit transformer(propagate_behavior data_propagate_type, const Fn& fn)
+			: transformer_base_t<Fn, Args...>(data_propagate_type), fn(fn){
 		}
-
-
 
 	protected:
 		using ret_t = std::remove_cvref_t<typename decltype(test_invoke_result<Fn, Args&&...>())::type>;
 
-		std::optional<ret_t> operator()(
-			const std::stop_token& stop_token,
-			const Args&... args) override{
-			if constexpr(std::invocable<Fn, const std::stop_token&, Args&&...>){
-				return std::invoke(fn, stop_token, args...);
-			} else{
-				return std::invoke(fn, args...);
-			}
+		ret_t operator()(const Args&... args) override{
+			return std::invoke(fn, args...);
 		}
 
-		std::optional<ret_t> operator()(
-			const std::stop_token& stop_token,
-			Args&&... args) override{
-			if constexpr(std::invocable<Fn, const std::stop_token&, Args&&...>){
-				return std::invoke(fn, stop_token, std::move(args)...);
-			} else{
-				return std::invoke(fn, std::move(args)...);
-			}
+		ret_t operator()(Args&&... args) override{
+			return std::invoke(fn, std::move(args)...);
 		}
 	};
 
@@ -838,9 +662,24 @@ namespace mo_yanxi::react_flow{
 		typename function_traits<std::remove_cvref_t<Fn>>::mem_func_args_type
 	>::type;
 
+	template <typename T> struct is_async_tuple : std::false_type {};
+	template <typename... Args>
+	struct is_async_tuple<std::tuple<const async_context&, Args...>> : std::true_type {};
+
 	export
 	template <typename Fn>
-	transformer_unambiguous<Fn> make_transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn){
-		return transformer_unambiguous<Fn>{data_propagate_type, async_type, std::forward<Fn>(fn)};
+	auto make_transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn){
+		return async_transformer_unambiguous<Fn>{data_propagate_type, async_type, std::forward<Fn>(fn)};
+	}
+
+	export
+	template <typename Fn>
+	auto make_transformer(propagate_behavior data_propagate_type, Fn&& fn){
+		using args_t = typename function_traits<std::remove_cvref_t<Fn>>::mem_func_args_type;
+		if constexpr (is_async_tuple<args_t>::value) {
+			return async_transformer_unambiguous<Fn>{data_propagate_type, async_type::none, std::forward<Fn>(fn)};
+		} else {
+			return transformer_unambiguous<Fn>{data_propagate_type, std::forward<Fn>(fn)};
+		}
 	}
 }
