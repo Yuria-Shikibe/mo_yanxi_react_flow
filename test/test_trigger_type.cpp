@@ -6,21 +6,20 @@ using namespace mo_yanxi::react_flow;
 
 TEST(TriggerTypeTest, Disabled) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<int>>();
+    auto p = mgr.add_node<provider_cached<int>>();
 
     std::atomic<int> count = 0;
-    auto& node = mgr.add_node(make_transformer(propagate_behavior::eager, async_type::async_latest, [&](const async_context&, int v){
+    auto node = mgr.add_node(make_transformer(propagate_behavior::eager, async_type::async_latest, [&](const async_context&, int v){
         count++;
         return v;
     }));
 
     // Access async_node interface
-    auto& async_n = dynamic_cast<async_node<int, int>&>(node);
-    async_n.set_trigger_type(trigger_type::disabled);
+    node->set_trigger_type(trigger_type::disabled);
 
-    p.connect_successors(node);
+    p->connect_successors(*node);
 
-    p.update_value(1);
+    p->update_value(1);
 
     // Give some time
     for(int i=0; i<10; ++i) {
@@ -34,19 +33,19 @@ TEST(TriggerTypeTest, Disabled) {
 
 TEST(TriggerTypeTest, OnPulse) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<int>>();
+    auto p = mgr.add_node<provider_cached<int>>();
 
     std::atomic<int> count = 0;
-    auto& node = mgr.add_node(make_transformer(propagate_behavior::eager, async_type::async_latest, [&](const async_context&, int v){
+    auto node = mgr.add_node(make_transformer(propagate_behavior::eager, async_type::async_latest, [&](const async_context&, int v){
         count++;
         return v;
     }));
 
-    node.set_trigger_type(trigger_type::on_pulse);
+    node->set_trigger_type(trigger_type::on_pulse);
 
-    p.connect_successors(node);
+    p->connect_successors(*node);
 
-    p.update_value(1);
+    p->update_value(1);
 
     // Should trigger
     auto start = std::chrono::steady_clock::now();
@@ -55,10 +54,10 @@ TEST(TriggerTypeTest, OnPulse) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     EXPECT_EQ(count, 1);
-    EXPECT_EQ(node.get_trigger_type(), trigger_type::disabled);
+    EXPECT_EQ(node->get_trigger_type(), trigger_type::disabled);
 
     // Update again
-    p.update_value(2);
+    p->update_value(2);
 
     // Should ignore
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -69,27 +68,27 @@ TEST(TriggerTypeTest, OnPulse) {
 
 TEST(TriggerTypeTest, OnPulseDelayed) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<int>>();
+    auto p = mgr.add_node<provider_cached<int>>();
 
     std::atomic<int> count = 0;
     // Async node with Pulse behavior
-    auto& node = mgr.add_node(make_transformer(propagate_behavior::pulse, async_type::async_latest, [&](const async_context&, int v){
+    auto node = mgr.add_node(make_transformer(propagate_behavior::pulse, async_type::async_latest, [&](const async_context&, int v){
         count++;
         return v;
     }));
 
-    node.set_trigger_type(trigger_type::on_pulse);
+    node->set_trigger_type(trigger_type::on_pulse);
 
-    p.connect_successors(node);
+    p->connect_successors(*node);
 
-    p.update_value(1);
+    p->update_value(1);
 
     // Should be waiting pulse
     // Wait a bit to ensure it didn't trigger
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
     EXPECT_EQ(count, 0);
-    EXPECT_EQ(node.get_trigger_type(), trigger_type::on_pulse);
+    EXPECT_EQ(node->get_trigger_type(), trigger_type::on_pulse);
 
     mgr.update(); // Manager update triggers pulse
     // Does it trigger pulse?
@@ -125,5 +124,5 @@ TEST(TriggerTypeTest, OnPulseDelayed) {
     }
 
     EXPECT_EQ(count, 1);
-    EXPECT_EQ(node.get_trigger_type(), trigger_type::disabled);
+    EXPECT_EQ(node->get_trigger_type(), trigger_type::disabled);
 }

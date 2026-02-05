@@ -134,10 +134,17 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] successor_entry() = default;
 
-		[[nodiscard]] successor_entry(const std::size_t index, node& entity)
-			: index(index),
-			entity(std::addressof(entity)){
-		}
+		[[nodiscard]] successor_entry(const std::size_t index, node& entity);
+
+		successor_entry(const successor_entry& other);
+
+		successor_entry(successor_entry&& other) noexcept;
+
+		successor_entry& operator=(const successor_entry& other);
+
+		successor_entry& operator=(successor_entry&& other) noexcept;
+
+		~successor_entry();
 
 		[[nodiscard]] node* get() const noexcept{
 			return entity;
@@ -175,8 +182,19 @@ namespace mo_yanxi::react_flow{
 	protected:
 		propagate_behavior data_propagate_type_{};
 		data_pending_state data_pending_state_{};
+		mutable std::size_t ref_count_{};
 
 	public:
+		void add_ref() const noexcept{
+			++ref_count_;
+		}
+
+		void release() const noexcept{
+			if(--ref_count_ == 0){
+				delete this;
+			}
+		}
+
 		[[nodiscard]] node() = default;
 
 		[[nodiscard]] explicit node(propagate_behavior data_propagate_type)
@@ -303,6 +321,10 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] virtual bool is_isolated() const noexcept{
 			return false;
+		}
+
+		[[nodiscard]] std::size_t get_ref_count() const noexcept{
+			return ref_count_;
 		}
 
 	public:
@@ -468,6 +490,10 @@ namespace mo_yanxi::react_flow{
 
 
 		[[nodiscard]] explicit provider_general(manager& manager) : manager_(std::addressof(manager)){
+		}
+
+		virtual ~provider_general(){
+			auto temp = std::move(successors);
 		}
 
 	protected:
@@ -701,6 +727,44 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 	};
+
+	successor_entry::successor_entry(const std::size_t index, node& entity)
+		: index(index),
+		entity(std::addressof(entity)){
+		this->entity->add_ref();
+	}
+
+	successor_entry::successor_entry(const successor_entry& other) : index(other.index), entity(other.entity){
+		if(entity) entity->add_ref();
+	}
+
+	successor_entry::successor_entry(successor_entry&& other) noexcept : index(other.index), entity(other.entity){
+		other.entity = nullptr;
+	}
+
+	successor_entry& successor_entry::operator=(const successor_entry& other){
+		if(this != &other){
+			if(entity) entity->release();
+			index = other.index;
+			entity = other.entity;
+			if(entity) entity->add_ref();
+		}
+		return *this;
+	}
+
+	successor_entry& successor_entry::operator=(successor_entry&& other) noexcept{
+		if(this != &other){
+			if(entity) entity->release();
+			index = other.index;
+			entity = other.entity;
+			other.entity = nullptr;
+		}
+		return *this;
+	}
+
+	successor_entry::~successor_entry(){
+		if(entity) entity->release();
+	}
 
 	template <typename T>
 	void successor_entry::update(manager& manager, push_data_storage<T>& data) const{

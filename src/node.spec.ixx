@@ -132,6 +132,10 @@ namespace mo_yanxi::react_flow{
 			: type_aware_node<Ret>(data_propagate_type){
 		}
 
+		~modifier_base() override{
+			auto temp = std::move(successors);
+		}
+
 		[[nodiscard]] bool is_isolated() const noexcept override{
 			return std::ranges::none_of(parents, std::identity{}) && successors.empty();
 		}
@@ -474,6 +478,10 @@ namespace mo_yanxi::react_flow{
 		std::vector<successor_entry> successors{};
 
 	public:
+		~relay() override{
+			auto temp = std::move(successors);
+		}
+
 		[[nodiscard]] std::span<const data_type_index> get_in_socket_type_index() const noexcept final{
 			return std::span{&in_type_indices, 1};
 		}

@@ -7,19 +7,19 @@ using namespace mo_yanxi::react_flow;
 
 TEST(MultithreadingTest, AsyncUpdate) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<int>>();
+    auto p = mgr.add_node<provider_cached<int>>();
 
     std::atomic<int> received_value = 0;
-    auto& t = mgr.add_node(make_listener([&](int v){
+    auto t = mgr.add_node(make_listener([&](int v){
         received_value.store(v);
     }));
 
-    p.connect_successors(t);
+    p->connect_successors(*t);
 
     std::jthread worker([&]{
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         mgr.push_posted_act([&]{
-            p.update_value(100);
+            p->update_value(100);
         });
     });
 
@@ -38,14 +38,14 @@ TEST(MultithreadingTest, AsyncUpdate) {
 
 TEST(MultithreadingTest, MultipleThreads) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<int>>();
+    auto p = mgr.add_node<provider_cached<int>>();
 
     std::atomic<int> sum = 0;
-    auto& t = mgr.add_node(make_listener([&](int v){
+    auto t = mgr.add_node(make_listener([&](int v){
         sum.fetch_add(v);
     }));
 
-    p.connect_successors(t);
+    p->connect_successors(*t);
 
     const int num_threads = 10;
     std::vector<std::jthread> threads;
@@ -53,7 +53,7 @@ TEST(MultithreadingTest, MultipleThreads) {
     for(int i = 0; i < num_threads; ++i) {
         threads.emplace_back([&, i]{
             mgr.push_posted_act([&]{
-                p.update_value(1);
+                p->update_value(1);
             });
         });
     }

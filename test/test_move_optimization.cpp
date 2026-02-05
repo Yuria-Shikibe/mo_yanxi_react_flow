@@ -70,17 +70,17 @@ struct TestListener : terminal<MoveTracker> {
 
 TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<MoveTracker>>();
+    auto p = mgr.add_node<provider_cached<MoveTracker>>();
 
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
+    auto trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
         return v;
     }));
 
     bool updated = false;
-    auto& t = mgr.add_node<TestListener>(propagate_behavior::eager, updated, "Single");
+    auto t = mgr.add_node<TestListener>(propagate_behavior::eager, updated, "Single");
 
-    p.connect_successors(trans);
-    trans.connect_successors(t);
+    p->connect_successors(*trans);
+    trans->connect_successors(*t);
 
     MoveTracker source("payload");
     ASSERT_EQ(source.value, "payload");
@@ -88,7 +88,7 @@ TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     // Reset counters before main update to ignore connection noise
     MoveTracker::reset();
 
-    p.update_value(std::move(source));
+    p->update_value(std::move(source));
 
     EXPECT_TRUE(updated);
 
@@ -107,16 +107,16 @@ TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     EXPECT_EQ(MoveTracker::copy_count, 1) << "Expected exactly 1 copy (from provider cache)";
 
     // Verify provider state (adds a copy)
-    auto cached_p = p.request(false);
+    auto cached_p = p->request(false);
     ASSERT_TRUE(cached_p.has_value());
     EXPECT_EQ(cached_p->value, "payload");
 }
 
 TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<MoveTracker>>();
+    auto p = mgr.add_node<provider_cached<MoveTracker>>();
 
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
+    auto trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
         return v;
     }));
 
@@ -124,20 +124,20 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
     bool t2_updated = false;
     bool t3_updated = false;
 
-    auto& t1 = mgr.add_node<TestListener>(propagate_behavior::eager, t1_updated, "T1");
-    auto& t2 = mgr.add_node<TestListener>(propagate_behavior::eager, t2_updated, "T2");
-    auto& t3 = mgr.add_node<TestListener>(propagate_behavior::eager, t3_updated, "T3");
+    auto t1 = mgr.add_node<TestListener>(propagate_behavior::eager, t1_updated, "T1");
+    auto t2 = mgr.add_node<TestListener>(propagate_behavior::eager, t2_updated, "T2");
+    auto t3 = mgr.add_node<TestListener>(propagate_behavior::eager, t3_updated, "T3");
 
-    p.connect_successors(trans);
+    p->connect_successors(*trans);
 
-    trans.connect_successors(t1);
-    trans.connect_successors(t2);
-    trans.connect_successors(t3);
+    trans->connect_successors(*t1);
+    trans->connect_successors(*t2);
+    trans->connect_successors(*t3);
 
     MoveTracker source("payload");
 
     MoveTracker::reset();
-    p.update_value(std::move(source));
+    p->update_value(std::move(source));
 
     EXPECT_TRUE(t1_updated);
     EXPECT_TRUE(t2_updated);

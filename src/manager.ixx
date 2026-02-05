@@ -5,6 +5,7 @@ module;
 export module mo_yanxi.react_flow:manager;
 
 import :node_interface;
+import :node_pointer;
 import mo_yanxi.utility;
 import mo_yanxi.concurrent.mpsc_queue;
 import mo_yanxi.algo;
@@ -103,21 +104,6 @@ namespace mo_yanxi::react_flow{
 
 	export constexpr inline manager_no_async_t manager_no_async{};
 
-	struct node_deleter{
-		static void operator()(node* pnode) noexcept{
-			pnode->disconnect_self_from_context();
-			delete pnode;
-		}
-	};
-
-	struct node_p : std::unique_ptr<node, node_deleter>{
-		template <std::derived_from<node> T, typename... Args>
-			requires (std::constructible_from<T, Args&&...>)
-		explicit(false) node_p(std::in_place_type_t<T>, Args&&... args) : std::unique_ptr<node, node_deleter>(
-			new T(std::forward<Args>(args)...), node_deleter{}){
-		}
-	};
-
 #ifdef __cpp_lib_move_only_function
 	using AsyncFuncType = std::move_only_function<void()>;
 #else
@@ -127,8 +113,7 @@ namespace mo_yanxi::react_flow{
 
 	export struct manager{
 	private:
-		std::vector<node_p> nodes_anonymous_{};
-		std::vector<node*> pulse_subscriber_{};
+		std::vector<node_pointer> pulse_subscriber_{};
 		std::unordered_set<node*> expired_nodes{};
 
 		using async_task_queue = ccur::mpsc_queue<AsyncFuncType>;
@@ -147,14 +132,14 @@ namespace mo_yanxi::react_flow{
 		std::jthread async_thread_{};
 
 		template <std::derived_from<node> T, typename... Args>
-		[[nodiscard]] node_p make_node(Args&&... args){
-			return mo_yanxi::back_redundant_construct<node_p, 1>(std::in_place_type<T>, *this,
+		[[nodiscard]] node_pointer make_node(Args&&... args){
+			return mo_yanxi::back_redundant_construct<node_pointer, 1>(std::in_place_type<T>, *this,
 				std::forward<Args>(args)...);
 		}
 
 		void process_node(node& node){
 			if(node.get_propagate_type() == propagate_behavior::pulse){
-				pulse_subscriber_.push_back(&node);
+				pulse_subscriber_.emplace_back(&node);
 			}
 		}
 
@@ -168,36 +153,18 @@ namespace mo_yanxi::react_flow{
 		}
 
 		template <std::derived_from<node> T, typename... Args>
-		T& add_node(Args&&... args){
-			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::forward<Args>(args)...));
+		typed_node_pointer<T> add_node(Args&&... args){
+			auto ptr = this->make_node<T>(std::forward<Args>(args)...);
 			this->process_node(*ptr);
-			return static_cast<T&>(*ptr);
+			return typed_node_pointer<T>(std::move(ptr));
 		}
 
 		template <std::derived_from<node> T>
-		T& add_node(T&& node){
-			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::move(node)));
-			this->process_node(*ptr);
-			return static_cast<T&>(*ptr);
-		}
-
-		template <std::derived_from<node> T>
-		T& add_node(const T& node){
-			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(node));
-			this->process_node(*ptr);
-			return static_cast<T&>(*ptr);
+		typed_node_pointer<T> add_node(T&& node){
+			return this->add_node<T>(std::forward<T>(node));
 		}
 
 		void clear_isolated() noexcept{
-			try{
-				for(auto&& node : nodes_anonymous_){
-					if(node->is_isolated()){
-						expired_nodes.insert(node.get());
-					}
-				}
-			} catch(...){
-				return; //end garbage collection directly
-			}
 		}
 
 		bool erase_node(node& n) noexcept
@@ -213,10 +180,7 @@ namespace mo_yanxi::react_flow{
 					return ptr->get_owner_if_node() == &n;
 				});
 			}
-			algo::erase_unique_unstable(pulse_subscriber_, &n);
-			return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_p& ptr){
-				return ptr.get() == &n;
-			});
+			return algo::erase_unique_unstable(pulse_subscriber_, &n);
 		}
 
 
@@ -250,11 +214,8 @@ namespace mo_yanxi::react_flow{
 				pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
 					return expired_nodes.contains(ptr->get_owner_if_node());
 				});
-				algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_p& ptr){
+				algo::erase_unique_if_unstable(pulse_subscriber_, [&](const node_pointer& ptr){
 					return expired_nodes.contains(ptr.get());
-				});
-				algo::erase_unique_if_unstable(pulse_subscriber_, [&](node* ptr){
-					return expired_nodes.contains(ptr);
 				});
 
 				expired_nodes.clear();

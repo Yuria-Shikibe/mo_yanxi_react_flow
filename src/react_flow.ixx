@@ -5,6 +5,7 @@ module;
 export module mo_yanxi.react_flow;
 
 export import :node_interface;
+export import :node_pointer;
 export import :manager;
 export import :nodes;
 export import :async_nodes;
@@ -88,15 +89,15 @@ void example(){
 		}
 	};
 
-	auto& p  = manager.add_node<provider_cached<std::string>>();
-	auto& m0 = manager.add_node<modifier_str_to_num>(async_type::async_latest);
-	auto& m1 = manager.add_node<modifier_num_to_num>();
-	auto& t0 = manager.add_node<printer>("Str To Num(delay 5s)");
-	auto& t1 = manager.add_node<printer>("Negate of Num");
+	auto p  = manager.add_node<provider_cached<std::string>>();
+	auto m0 = manager.add_node<modifier_str_to_num>(async_type::async_latest);
+	auto m1 = manager.add_node<modifier_num_to_num>();
+	auto t0 = manager.add_node<printer>("Str To Num(delay 5s)");
+	auto t1 = manager.add_node<printer>("Negate of Num");
 
 	connect_chain(std::initializer_list<std::initializer_list<node*>>{
-		{&p, &m0, &t0},
-		{&m0, &m1, &t1}
+		{p, m0, t0},
+		{m0, m1, t1}
 	});
 
 	std::atomic_flag exit_flag{};
@@ -112,7 +113,7 @@ void example(){
 			}
 
 			manager.push_posted_act([&, s = std::move(str)] mutable {
-				p.update_value(std::move(s));
+				static_cast<provider_cached<std::string>*>(p.get())->update_value(std::move(s));
 			});
 		}
 	});
@@ -120,9 +121,10 @@ void example(){
 	while(!exit_flag.test(std::memory_order::relaxed)){
 		manager.update();
 
-		if(t1.is_data_expired()){
+		auto* t1_ptr = static_cast<printer*>(t1.get());
+		if(t1_ptr->is_data_expired()){
 			std::this_thread::sleep_for(std::chrono::milliseconds(500));
-			t1.on_update(t1.request(true).value());
+			t1_ptr->on_update(t1_ptr->request(true).value());
 		}
 	}
 }
