@@ -349,7 +349,7 @@ namespace mo_yanxi::react_flow{
 	struct async_node_task final : progressed_async_node_base{
 	private:
 		using type = async_node<T, Args...>;
-		type* modifier_{};
+		node_pointer<type> modifier_{};
 
 		std::tuple<Args...> arguments_{};
 		std::optional<T> rst_cache_{};
@@ -372,7 +372,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 		node* get_owner_if_node() noexcept override{
-			return modifier_;
+			return modifier_.get();
 		}
 
 		void on_update_check(manager& manager) override{

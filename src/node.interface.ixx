@@ -128,19 +128,100 @@ namespace mo_yanxi::react_flow{
 	using node_ptr = node*;
 
 	export
+	template <typename T = node>
+	struct node_pointer{
+		using pointer = T*;
+		using element_type = T;
+
+		constexpr node_pointer() noexcept = default;
+		constexpr node_pointer(std::nullptr_t) noexcept : node_pointer() {}
+
+		explicit node_pointer(T* p) : ptr_(p) {
+			if(ptr_) ptr_->retain();
+		}
+
+		node_pointer(const node_pointer& other) : ptr_(other.ptr_) {
+			if(ptr_) ptr_->retain();
+		}
+
+		node_pointer(node_pointer&& other) noexcept : ptr_(std::exchange(other.ptr_, nullptr)) {}
+
+		template<typename U>
+			requires std::convertible_to<U*, T*>
+		node_pointer(const node_pointer<U>& other) : ptr_(other.get()) {
+			if(ptr_) ptr_->retain();
+		}
+
+		template<typename U>
+			requires std::convertible_to<U*, T*>
+		node_pointer(node_pointer<U>&& other) noexcept : ptr_(other.release_ownership()) {}
+
+		template <typename U, typename... Args>
+			requires std::convertible_to<U*, T*> && std::constructible_from<U, Args&&...>
+		explicit node_pointer(std::in_place_type_t<U>, Args&&... args)
+			: ptr_(new U(std::forward<Args>(args)...)) {
+			// Node starts with ref_count 0.
+			if(ptr_) ptr_->retain();
+		}
+
+		~node_pointer() {
+			reset();
+		}
+
+		node_pointer& operator=(const node_pointer& other) {
+			if(this != &other){
+				reset(other.ptr_);
+			}
+			return *this;
+		}
+
+		node_pointer& operator=(node_pointer&& other) noexcept {
+			if(this != &other){
+				T* old = std::exchange(ptr_, other.release_ownership());
+				if(old) old->release();
+			}
+			return *this;
+		}
+
+		node_pointer& operator=(std::nullptr_t) noexcept {
+			reset();
+			return *this;
+		}
+
+		void reset(T* p = nullptr) {
+			if(ptr_ != p) {
+				if(p) p->retain();
+				T* old = std::exchange(ptr_, p);
+				if(old) old->release();
+			}
+		}
+
+		[[nodiscard]] T* get() const noexcept { return ptr_; }
+		[[nodiscard]] T& operator*() const noexcept { return *ptr_; }
+		[[nodiscard]] T* operator->() const noexcept { return ptr_; }
+		explicit operator bool() const noexcept { return ptr_ != nullptr; }
+
+		[[nodiscard]] T* release_ownership() noexcept {
+			return std::exchange(ptr_, nullptr);
+		}
+
+		auto operator<=>(const node_pointer&) const = default;
+
+	private:
+		T* ptr_{nullptr};
+	};
+
+	export
 	struct successor_entry{
 		std::size_t index;
-		node_ptr entity;
+		node_pointer<node> entity;
 
 		[[nodiscard]] successor_entry() = default;
 
-		[[nodiscard]] successor_entry(const std::size_t index, node& entity)
-			: index(index),
-			entity(std::addressof(entity)){
-		}
+		[[nodiscard]] successor_entry(const std::size_t index, node& entity);
 
 		[[nodiscard]] node* get() const noexcept{
-			return entity;
+			return entity.get();
 		}
 
 		template <typename T>
@@ -175,6 +256,7 @@ namespace mo_yanxi::react_flow{
 	protected:
 		propagate_behavior data_propagate_type_{};
 		data_pending_state data_pending_state_{};
+		std::atomic<std::size_t> ref_count_{0};
 
 	public:
 		[[nodiscard]] node() = default;
@@ -183,7 +265,49 @@ namespace mo_yanxi::react_flow{
 			: data_propagate_type_(data_propagate_type){
 		}
 
+		node(const node& other)
+			: data_propagate_type_(other.data_propagate_type_),
+			  data_pending_state_(other.data_pending_state_),
+			  ref_count_(0) {
+		}
+
+		node(node&& other) noexcept
+			: data_propagate_type_(std::move(other.data_propagate_type_)),
+			  data_pending_state_(std::move(other.data_pending_state_)),
+			  ref_count_(0) {
+		}
+
+		node& operator=(const node& other) {
+			if (this != &other) {
+				data_propagate_type_ = other.data_propagate_type_;
+				data_pending_state_ = other.data_pending_state_;
+				// Ref count remains unchanged
+			}
+			return *this;
+		}
+
+		node& operator=(node&& other) noexcept {
+			if (this != &other) {
+				data_propagate_type_ = std::move(other.data_propagate_type_);
+				data_pending_state_ = std::move(other.data_pending_state_);
+				// Ref count remains unchanged
+			}
+			return *this;
+		}
+
 		virtual ~node() = default;
+
+		void retain() noexcept {
+			ref_count_.fetch_add(1, std::memory_order_relaxed);
+		}
+
+		void release() noexcept {
+			if(ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 1){
+				std::atomic_thread_fence(std::memory_order_acquire);
+				this->disconnect_self_from_context();
+				delete this;
+			}
+		}
 
 		[[nodiscard]] propagate_behavior get_propagate_type() const noexcept{
 			return data_propagate_type_;
@@ -363,7 +487,7 @@ namespace mo_yanxi::react_flow{
 
 		static bool try_insert(std::vector<successor_entry>& successors, std::size_t slot, node& next){
 			if(std::ranges::find_if(successors, [&](const successor_entry& e){
-				return e.index == slot && e.entity == &next;
+				return e.index == slot && e.entity.get() == &next;
 			}) != successors.end()){
 				return false;
 			}
@@ -375,10 +499,15 @@ namespace mo_yanxi::react_flow{
 		static bool try_erase(std::vector<successor_entry>& successors, const std::size_t slot,
 			const node& next) noexcept{
 			return std::erase_if(successors, [&](const successor_entry& e){
-				return e.index == slot && e.entity == &next;
+				return e.index == slot && e.entity.get() == &next;
 			});
 		}
 	};
+
+	successor_entry::successor_entry(const std::size_t index, node& entity)
+			: index(index),
+			entity(&entity){
+	}
 
 	export
 	template <typename T>
