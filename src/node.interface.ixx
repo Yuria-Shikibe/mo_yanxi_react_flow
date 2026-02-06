@@ -189,6 +189,9 @@ namespace mo_yanxi::react_flow{
 		template <typename T>
 		friend struct intermediate_cache;
 
+		template <typename Ret, typename... Args>
+		friend struct async_node;
+
 	private:
 		std::size_t reference_count_{};
 
