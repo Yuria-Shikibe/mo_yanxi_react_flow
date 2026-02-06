@@ -366,13 +366,17 @@ namespace mo_yanxi::react_flow{
 	struct async_node_task final : progressed_async_node_base{
 	private:
 		using type = async_node<T, Args...>;
-		type* modifier_{};
+		node_pointer modifier_{};
 
 		std::tuple<Args...> arguments_{};
 		std::optional<T> rst_cache_{};
 
 		std::vector<successor_entry> progress_subscribers_{};
 
+	private:
+		type& get() const noexcept{
+			return static_cast<type&>(*modifier_);
+		}
 	public:
 		[[nodiscard]] explicit async_node_task(type& modifier, std::span<successor_entry> subscribers_, std::tuple<Args...>&& args) :
 			progressed_async_node_base{!subscribers_.empty()},
@@ -380,16 +384,16 @@ namespace mo_yanxi::react_flow{
 		}
 
 		void on_finish(manager& manager) override{
-			--modifier_->dispatched_count_;
+			--get().dispatched_count_;
 			set_progress_done();
 
 			if(rst_cache_){
-				modifier_->async_done(manager, rst_cache_.value());
+				get().async_done(manager, rst_cache_.value());
 			}
 		}
 
 		node* get_owner_if_node() noexcept override{
-			return modifier_;
+			return modifier_.get();
 		}
 
 		void on_update_check(manager& manager) override{
@@ -403,7 +407,7 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		void execute() override{
-			rst_cache_ = modifier_->apply(async_context{modifier_->get_stop_token(), this}, std::move(arguments_));
+			rst_cache_ = get().apply(async_context{get().get_stop_token(), this}, std::move(arguments_));
 		}
 	};
 
