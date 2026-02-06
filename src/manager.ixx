@@ -59,6 +59,9 @@ namespace mo_yanxi::react_flow{
 			return {};
 		}
 
+		/**
+		 * @brief Called on manager main thread when the async task is under processing
+		 */
 		virtual void on_update_check(manager& manager){
 
 		}
@@ -103,21 +106,6 @@ namespace mo_yanxi::react_flow{
 
 	export constexpr inline manager_no_async_t manager_no_async{};
 
-	struct node_deleter{
-		static void operator()(node* pnode) noexcept{
-			pnode->disconnect_self_from_context();
-			delete pnode;
-		}
-	};
-
-	struct node_p : std::unique_ptr<node, node_deleter>{
-		template <std::derived_from<node> T, typename... Args>
-			requires (std::constructible_from<T, Args&&...>)
-		explicit(false) node_p(std::in_place_type_t<T>, Args&&... args) : std::unique_ptr<node, node_deleter>(
-			new T(std::forward<Args>(args)...), node_deleter{}){
-		}
-	};
-
 #ifdef __cpp_lib_move_only_function
 	using AsyncFuncType = std::move_only_function<void()>;
 #else
@@ -127,7 +115,7 @@ namespace mo_yanxi::react_flow{
 
 	export struct manager{
 	private:
-		std::vector<node_p> nodes_anonymous_{};
+		std::vector<node_pointer> nodes_anonymous_{};
 		std::vector<node*> pulse_subscriber_{};
 		std::unordered_set<node*> expired_nodes{};
 
@@ -147,8 +135,8 @@ namespace mo_yanxi::react_flow{
 		std::jthread async_thread_{};
 
 		template <std::derived_from<node> T, typename... Args>
-		[[nodiscard]] node_p make_node(Args&&... args){
-			return mo_yanxi::back_redundant_construct<node_p, 1>(std::in_place_type<T>, *this,
+		[[nodiscard]] node_pointer make_node(Args&&... args){
+			return mo_yanxi::back_redundant_construct<node_pointer, 1>(std::in_place_type<T>, *this,
 				std::forward<Args>(args)...);
 		}
 
@@ -214,7 +202,7 @@ namespace mo_yanxi::react_flow{
 				});
 			}
 			algo::erase_unique_unstable(pulse_subscriber_, &n);
-			return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_p& ptr){
+			return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
 				return ptr.get() == &n;
 			});
 		}
@@ -250,7 +238,7 @@ namespace mo_yanxi::react_flow{
 				pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
 					return expired_nodes.contains(ptr->get_owner_if_node());
 				});
-				algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_p& ptr){
+				algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
 					return expired_nodes.contains(ptr.get());
 				});
 				algo::erase_unique_if_unstable(pulse_subscriber_, [&](node* ptr){

@@ -511,7 +511,7 @@ namespace mo_yanxi::react_flow{
 			if constexpr(std::convertible_to<const I&, O>){
 				return input;
 			} else{
-				throw invalid_node{"not implemented!"};
+				throw invalid_node_error{"not implemented!"};
 			}
 		}
 

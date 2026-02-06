@@ -20,7 +20,7 @@ TEST(CycleTest, SimpleCycle) {
     try {
         t2.connect_successors(t1);
         FAIL() << "Expected invalid_node exception";
-    } catch (const invalid_node& e) {
+    } catch (const invalid_node_error& e) {
         EXPECT_STREQ(e.what(), "ring detected");
     } catch (...) {
         FAIL() << "Expected invalid_node exception";
@@ -35,7 +35,7 @@ TEST(CycleTest, SelfCycle) {
     try {
         t1.connect_successors(t1);
         FAIL() << "Expected invalid_node exception";
-    } catch (const invalid_node& e) {
+    } catch (const invalid_node_error& e) {
         EXPECT_STREQ(e.what(), "ring detected");
     } catch (...) {
         FAIL() << "Expected invalid_node exception";
@@ -55,7 +55,7 @@ TEST(CycleTest, LargerCycle) {
     try {
         t3.connect_successors(t1);
         FAIL() << "Expected invalid_node exception";
-    } catch (const invalid_node& e) {
+    } catch (const invalid_node_error& e) {
         EXPECT_STREQ(e.what(), "ring detected");
     } catch (...) {
         FAIL() << "Expected invalid_node exception";

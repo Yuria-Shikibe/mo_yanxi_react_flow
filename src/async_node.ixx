@@ -7,6 +7,7 @@ export module mo_yanxi.react_flow:async_nodes;
 
 import :manager;
 import :node_interface;
+import mo_yanxi.type_register;
 import mo_yanxi.meta_programming;
 import std;
 
@@ -87,6 +88,19 @@ namespace mo_yanxi::react_flow{
 			trigger_type_ = trigger_type;
 		}
 
+		bool add_progress_receiver(node& node){
+			const auto rng = node.get_in_socket_type_index();
+			if(const auto itr = std::ranges::find(rng, unstable_type_identity_of<progress_check>()); itr != rng.end()){
+				const std::size_t idx = std::ranges::distance(rng.begin(), itr);
+				node.connect_predecessor_impl(idx, *this);
+				progress_receiver_.push_back({idx, node});
+				return true;
+			} else{
+				throw invalid_node_error{"Failed To Find Slot"};
+			}
+		}
+
+
 		[[nodiscard]] std::stop_token get_stop_token() const noexcept{
 			assert(stop_source_.stop_possible());
 			return stop_source_.get_token();
@@ -145,6 +159,8 @@ namespace mo_yanxi::react_flow{
 			}
 			return make_request_handle_unexpected<Ret>(data_state::failed);
 		}
+
+
 
 	protected:
 		// --- 数据推送与更新处理 (合并了 cached 的逻辑) ---
@@ -267,7 +283,7 @@ namespace mo_yanxi::react_flow{
 		// --- 内部连接辅助 ---
 
 		void async_done(manager& manager, Ret& data) const{
-			update_children(manager, data);
+			this->update_children(manager, data);
 		}
 
 		bool connect_successors_impl(std::size_t slot, node& post) final{
@@ -278,7 +294,8 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
-			return node::try_erase(successors_, slot, post);
+			if(node::try_erase(successors_, slot, post))return true;
+			return node::try_erase(progress_receiver_, slot, post);
 		}
 
 		void connect_predecessor_impl(std::size_t slot, node& prev) final{

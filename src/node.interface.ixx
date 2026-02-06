@@ -33,6 +33,8 @@ namespace mo_yanxi::react_flow{
 	private:
 		node* node_{};
 	public:
+		inline constexpr node_pointer() = default;
+
 		inline explicit(false) node_pointer(node* node)
 			: node_(node){
 			if(node_)incr_();
@@ -92,6 +94,14 @@ namespace mo_yanxi::react_flow{
 
 		inline bool operator==(const node_pointer&) const noexcept = default;
 
+		friend inline bool operator==(const node_pointer& lhs, const node* rhs) noexcept{
+			return lhs.node_ == rhs;
+		}
+
+		friend inline bool operator==(const node* lhs, const node_pointer& rhs) noexcept{
+			return lhs == rhs.node_;
+		}
+
 		inline node& operator*() const noexcept{
 			assert(node_ != nullptr);
 			return *node_;
@@ -108,12 +118,12 @@ namespace mo_yanxi::react_flow{
 	};
 
 	export
-	struct invalid_node : std::invalid_argument{
-		[[nodiscard]] explicit invalid_node(const std::string& msg)
+	struct invalid_node_error : std::invalid_argument{
+		[[nodiscard]] explicit invalid_node_error(const std::string& msg)
 			: invalid_argument(msg){
 		}
 
-		[[nodiscard]] explicit invalid_node(const char* msg)
+		[[nodiscard]] explicit invalid_node_error(const char* msg)
 			: invalid_argument(msg){
 		}
 	};
@@ -136,17 +146,17 @@ namespace mo_yanxi::react_flow{
 	export
 	struct successor_entry{
 		std::size_t index;
-		raw_node_ptr entity;
+		node_pointer entity;
 
 		[[nodiscard]] successor_entry() = default;
 
 		[[nodiscard]] successor_entry(const std::size_t index, node& entity)
 			: index(index),
-			entity(std::addressof(entity)){
+			entity(entity){
 		}
 
 		[[nodiscard]] node* get() const noexcept{
-			return entity;
+			return entity.get();
 		}
 
 		template <typename T>
@@ -280,13 +290,13 @@ namespace mo_yanxi::react_flow{
 		bool connect_successors(const std::size_t slot, node& post){
 #if MO_YANXI_DATA_FLOW_ENABLE_RING_CHECK
 			if(is_ring_bridge(this, &post)){
-				throw invalid_node{"ring detected"};
+				throw invalid_node_error{"ring detected"};
 			}
 #endif
 
 
 			if(!std::ranges::contains(post.get_in_socket_type_index(), get_out_socket_type_index())){
-				throw invalid_node{"Node type NOT match"};
+				throw invalid_node_error{"Node type NOT match"};
 			}
 
 			return connect_successors_unchecked(slot, post);
@@ -299,7 +309,7 @@ namespace mo_yanxi::react_flow{
 		bool connect_successors(node& post){
 #if MO_YANXI_DATA_FLOW_ENABLE_RING_CHECK
 			if(is_ring_bridge(this, &post)){
-				throw invalid_node{"ring detected"};
+				throw invalid_node_error{"ring detected"};
 			}
 #endif
 
@@ -307,7 +317,7 @@ namespace mo_yanxi::react_flow{
 			if(auto itr = std::ranges::find(rng, get_out_socket_type_index()); itr != rng.end()){
 				return connect_successors_unchecked(std::ranges::distance(rng.begin(), itr), post);
 			} else{
-				throw invalid_node{"Failed To Find Slot"};
+				throw invalid_node_error{"Failed To Find Slot"};
 			}
 		}
 
@@ -337,7 +347,7 @@ namespace mo_yanxi::react_flow{
 					return true;
 				}
 			} else{
-				throw invalid_node{"Failed To Find Slot"};
+				throw invalid_node_error{"Failed To Find Slot"};
 			}
 
 			return false;
@@ -500,7 +510,7 @@ namespace mo_yanxi::react_flow{
 #if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
 		auto idt = node.get_out_socket_type_index();
 		if(idt != unstable_type_identity_of<T>()){
-			throw invalid_node{"Node type NOT match"};
+			throw invalid_node_error{"Node type NOT match"};
 		}
 #endif
 		return static_cast<type_aware_node<T>&>(node);
@@ -525,6 +535,8 @@ namespace mo_yanxi::react_flow{
 		}
 
 	public:
+		//TODO should these two function virtual?
+
 		void update_value(T&& value){
 			this->update_value_unchecked(std::move(value));
 		}
@@ -758,6 +770,7 @@ namespace mo_yanxi::react_flow{
 
 	void node_pointer::decr_() const noexcept{
 		if(node_->decr_ref()){
+			node_->disconnect_self_from_context();
 			delete node_;
 		}
 	}
@@ -771,7 +784,7 @@ namespace mo_yanxi::react_flow{
 	void successor_entry::update(manager& manager, push_data_obj& data, data_type_index checker) const{
 #if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
 		if(entity->get_in_socket_type_index()[index] != checker){
-			throw invalid_node{"Type Mismatch on update"};
+			throw invalid_node_error{"Type Mismatch on update"};
 		}
 #endif
 		entity->on_push(manager, index, data);
