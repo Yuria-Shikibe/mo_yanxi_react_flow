@@ -256,6 +256,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 		void async_launch(){
+			assert(manager_);
 			if(stop_source_.stop_possible()){
 				if(async_type_ == async_type::async_latest){
 					if(async_cancel()){
