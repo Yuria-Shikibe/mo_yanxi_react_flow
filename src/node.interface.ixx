@@ -160,9 +160,9 @@ namespace mo_yanxi::react_flow{
 		}
 
 		template <typename T>
-		void update(manager& manager, push_data_storage<T>& data) const;
+		void update(push_data_storage<T>& data) const;
 
-		void update(manager& manager, push_data_obj& data, data_type_index checker) const;
+		void update(push_data_obj& data, data_type_index checker) const;
 
 		void mark_updated() const;
 	};
@@ -360,6 +360,9 @@ namespace mo_yanxi::react_flow{
 		virtual void disconnect_self_from_context() noexcept{
 		}
 
+		virtual void set_manager(manager& manager){
+		}
+
 		[[nodiscard]] virtual bool is_isolated() const noexcept{
 			return false;
 		}
@@ -384,10 +387,10 @@ namespace mo_yanxi::react_flow{
 #pragma endregion
 
 	protected:
-		void push_update(this const auto& self, manager& manager, push_data_obj& data, data_type_index idx){
+		void push_update(this const auto& self, push_data_obj& data, data_type_index idx){
 			if(self.data_propagate_type_ == propagate_behavior::eager){
 				for(const successor_entry& successor : self.get_outputs()){
-					successor.update(manager, data, idx);
+					successor.update(data, idx);
 				}
 			} else{
 				std::ranges::for_each(self.get_outputs(), &successor_entry::mark_updated);
@@ -403,10 +406,9 @@ namespace mo_yanxi::react_flow{
 		 *
 		 * The data flow is from source to terminal (push)
 		 *
-		 * @param manager
 		 * @param in_data ptr to const data, provided by parent
 		 */
-		virtual void on_push(manager& manager, std::size_t from_index, push_data_obj& in_data){
+		virtual void on_push(std::size_t from_index, push_data_obj& in_data){
 		}
 
 		/**
@@ -587,10 +589,10 @@ namespace mo_yanxi::react_flow{
 			for(std::size_t i = 0; i < count; ++i){
 				if(i == count - 1){
 					push_data_storage<T> data(std::move(*target));
-					successors[i].update(*manager_, data);
+					successors[i].update(data);
 				} else{
 					push_data_storage<T> data(*target);
-					successors[i].update(*manager_, data);
+					successors[i].update(data);
 				}
 			}
 		}
@@ -680,7 +682,7 @@ namespace mo_yanxi::react_flow{
 
 		friend terminal_cached<T>;
 
-		void on_push(manager& manager, const std::size_t from_index, push_data_obj& in_data) override{
+		void on_push(const std::size_t from_index, push_data_obj& in_data) override{
 			assert(from_index == 0);
 			this->data_pending_state_ = data_pending_state::done;
 			auto& storage = push_data_cast<T>(in_data);
@@ -728,7 +730,7 @@ namespace mo_yanxi::react_flow{
 			this->on_update(cache_);
 		}
 
-		void on_push(manager& manager, const std::size_t from_index, push_data_obj& in_data) override{
+		void on_push(const std::size_t from_index, push_data_obj& in_data) override{
 			switch(this->data_propagate_type_){
 			case propagate_behavior::eager : this->data_pending_state_ = data_pending_state::done;
 				{
@@ -776,18 +778,18 @@ namespace mo_yanxi::react_flow{
 	}
 
 	template <typename T>
-	void successor_entry::update(manager& manager, push_data_storage<T>& data) const{
+	void successor_entry::update(push_data_storage<T>& data) const{
 		assert(unstable_type_identity_of<T>() == entity->get_in_socket_type_index()[index]);
-		entity->on_push(manager, index, data);
+		entity->on_push(index, data);
 	}
 
-	void successor_entry::update(manager& manager, push_data_obj& data, data_type_index checker) const{
+	void successor_entry::update(push_data_obj& data, data_type_index checker) const{
 #if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
 		if(entity->get_in_socket_type_index()[index] != checker){
 			throw invalid_node_error{"Type Mismatch on update"};
 		}
 #endif
-		entity->on_push(manager, index, data);
+		entity->on_push(index, data);
 	}
 
 	void successor_entry::mark_updated() const{
