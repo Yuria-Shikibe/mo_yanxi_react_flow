@@ -122,7 +122,7 @@ namespace mo_yanxi::react_flow{
 		using arg_type = std::tuple<std::remove_const_t<Args>...>;
 
 	private:
-		std::array<node_ptr, arg_count> parents{};
+		std::array<raw_node_ptr, arg_count> parents{};
 		std::vector<successor_entry> successors{};
 
 	public:
@@ -139,7 +139,7 @@ namespace mo_yanxi::react_flow{
 		[[nodiscard]] data_state get_data_state() const noexcept override{
 			data_state states{};
 
-			for(const node_ptr& p : parents){
+			for(const raw_node_ptr& p : parents){
 				update_state_enum(states, p->get_data_state());
 			}
 
@@ -152,7 +152,7 @@ namespace mo_yanxi::react_flow{
 
 		void disconnect_self_from_context() noexcept final{
 			for(std::size_t i = 0; i < parents.size(); ++i){
-				if(node_ptr& ptr = parents[i]){
+				if(raw_node_ptr& ptr = parents[i]){
 					ptr->erase_successors_single_edge(i, *this);
 					ptr = nullptr;
 				}
@@ -163,7 +163,7 @@ namespace mo_yanxi::react_flow{
 			successors.clear();
 		}
 
-		[[nodiscard]] std::span<const node_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
 			return parents;
 		}
 
@@ -289,7 +289,7 @@ namespace mo_yanxi::react_flow{
 						auto& storage = push_data_cast<Ty>(*in_data);
 						std::get<I>(arguments) = storage.get();
 					} else{
-						if(auto& nptr = static_cast<const node_ptr&>(this->get_inputs()[I])){
+						if(auto& nptr = static_cast<const raw_node_ptr&>(this->get_inputs()[I])){
 							node& n = *nptr;
 							if(auto rst = node_type_cast<Ty>(n).request(true)){
 								std::get<I>(arguments) = std::move(rst).value();
@@ -437,7 +437,7 @@ namespace mo_yanxi::react_flow{
 				([&, this]<std::size_t I>(){
 					if(!dirty[I]) return;
 
-					node& n = *static_cast<const node_ptr&>(this->get_inputs()[Idx]);
+					node& n = *static_cast<const raw_node_ptr&>(this->get_inputs()[Idx]);
 					if(auto rst = node_type_cast<std::tuple_element_t<Idx, typename base::arg_type>>(n).request(false)){
 						dirty.set(I, false);
 						std::get<Idx>(arguments) = std::move(rst).value();
@@ -470,7 +470,7 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 		O cache{};
-		node_ptr parent{};
+		raw_node_ptr parent{};
 		std::vector<successor_entry> successors{};
 
 	public:
@@ -478,7 +478,7 @@ namespace mo_yanxi::react_flow{
 			return std::span{&in_type_indices, 1};
 		}
 
-		[[nodiscard]] std::span<const node_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
 			return {&parent, 1};
 		}
 

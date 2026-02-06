@@ -2,8 +2,6 @@ module;
 
 #include <cassert>
 
-#include <mo_yanxi/enum_operator_gen.hpp>
-
 #ifndef MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
 #define MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK 1
 #endif
@@ -11,6 +9,11 @@ module;
 #ifndef MO_YANXI_DATA_FLOW_ENABLE_RING_CHECK
 #define MO_YANXI_DATA_FLOW_ENABLE_RING_CHECK 1
 #endif
+
+#ifndef MO_YANXI_DATA_FLOW_DISABLE_THREAD_CHECK
+#define THREAD_CHECK
+#endif
+
 
 export module mo_yanxi.react_flow:node_interface;
 import std;
@@ -23,9 +26,80 @@ namespace mo_yanxi::react_flow{
 
 	export struct manager;
 
-	export struct socket_type_pair{
-		data_type_index input;
-		data_type_index output;
+	export struct node;
+
+	export
+	struct node_pointer{
+	private:
+		node* node_{};
+	public:
+		inline explicit(false) node_pointer(node* node)
+			: node_(node){
+			if(node_)incr_();
+		}
+
+		inline explicit(false) node_pointer(node& node)
+			: node_(&node){
+			incr_();
+		}
+
+		template <typename T, typename ...Args>
+			requires std::constructible_from<T, Args&&...>
+		inline explicit node_pointer(std::in_place_type_t<T>, Args&& ...args)
+			: node_(new T(std::forward<Args>(args)...)){
+			incr_();
+		}
+
+		inline explicit operator bool() const noexcept{
+			return node_ != nullptr;
+		}
+
+		inline node* get() const noexcept{
+			return node_;
+		}
+
+		inline void reset(node* p = nullptr){
+			if(node_)decr_();
+			node_ = p;
+			if(node_)incr_();
+		}
+
+		inline node_pointer(const node_pointer& other) noexcept
+			: node_(other.node_){
+			if(node_)incr_();
+		}
+
+		inline node_pointer(node_pointer&& other) noexcept
+			: node_(std::exchange(other.node_, nullptr)){
+		}
+
+		inline node_pointer& operator=(const node_pointer& other) noexcept{
+			if(this == &other) return *this;
+			reset(other.node_);
+			return *this;
+		}
+
+		inline node_pointer& operator=(node_pointer&& other) noexcept{
+			if(this == &other) return *this;
+			node_ = std::exchange(other.node_, nullptr);
+			return *this;
+		}
+
+		inline bool operator==(const node_pointer&) const noexcept = default;
+
+		inline node& operator*() const noexcept{
+			assert(node_ != nullptr);
+			return *node_;
+		}
+
+		inline node* operator->() const noexcept{
+			return node_;
+		}
+
+	private:
+		inline void incr_() const noexcept;
+
+		inline void decr_() const noexcept;
 	};
 
 	export
@@ -40,77 +114,6 @@ namespace mo_yanxi::react_flow{
 	};
 
 
-	ENUM_COMPARISON_OPERATORS(data_state, export)
-
-	//TODO return both data and state
-	export
-	template <typename T>
-	using request_pass_handle = request_result<data_package_optimal<T>>;
-
-	export
-	template <typename T>
-	[[nodiscard]] request_pass_handle<T> make_request_handle_unexpected(data_state error) noexcept{
-		return request_pass_handle<T>{error};
-	}
-
-	export
-	template <typename T>
-	[[nodiscard]] request_pass_handle<T> make_request_handle_expected(T&& data, bool isExpired) noexcept{
-		return request_pass_handle<T>(isExpired, std::in_place, std::forward<T>(data));
-	}
-
-	export
-	template <typename T>
-	[[nodiscard]] request_pass_handle<T> make_request_handle_expected_ref(const T& data, bool isExpired) noexcept{
-		return request_pass_handle<T>(isExpired, data);
-	}
-
-	export enum struct async_type : std::uint8_t{
-		/**
-		 * @brief When a new update is arrived and the previous is not done yet, cancel the previous
-		 */
-		async_latest,
-
-		/**
-		 * @brief When a new update is arrived and the previous is not done yet, just dispatch again
-		 */
-		async_all,
-
-		def = async_latest
-	};
-
-	export enum struct trigger_type : std::uint8_t{
-		disabled,
-		on_pulse,
-		active
-	};
-
-	export enum struct propagate_behavior : std::uint8_t{
-		eager,
-		lazy,
-		pulse
-	};
-
-	export enum struct data_pending_state : std::uint8_t{
-		done,
-		expired,
-		waiting_pulse
-	};
-
-
-	template <std::ranges::input_range Rng>
-		requires (std::is_scoped_enum_v<std::ranges::range_value_t<Rng>>)
-	std::ranges::range_value_t<Rng> merge_data_state(const Rng& states) noexcept{
-		return std::ranges::max(states, std::ranges::less{}, [](const auto v){
-			return std::to_underlying(v);
-		});
-	}
-
-	template <typename T>
-	void update_state_enum(T& state, T other) noexcept{
-		state = T{std::max(std::to_underlying(state), std::to_underlying(other))};
-	}
-
 	export
 	template <typename T>
 	struct terminal;
@@ -122,15 +125,13 @@ namespace mo_yanxi::react_flow{
 	template <typename T>
 	struct intermediate_cache;
 
-	export struct node;
-
 	export
-	using node_ptr = node*;
+	using raw_node_ptr = node*;
 
 	export
 	struct successor_entry{
 		std::size_t index;
-		node_ptr entity;
+		raw_node_ptr entity;
 
 		[[nodiscard]] successor_entry() = default;
 
@@ -165,12 +166,21 @@ namespace mo_yanxi::react_flow{
 	struct node{
 		friend successor_entry;
 		friend manager;
+		friend node_pointer;
 
 		template <typename Ret, typename... Args>
 		friend struct modifier_base;
 
 		template <typename T>
 		friend struct intermediate_cache;
+
+	private:
+		std::size_t reference_count_{};
+
+#ifdef THREAD_CHECK
+		std::thread::id created_thread_id_{std::this_thread::get_id()};
+#endif
+
 
 	protected:
 		propagate_behavior data_propagate_type_{};
@@ -184,6 +194,40 @@ namespace mo_yanxi::react_flow{
 		}
 
 		virtual ~node() = default;
+
+		void incr_ref() noexcept{
+#ifdef THREAD_CHECK
+			if(created_thread_id_ != std::this_thread::get_id()){
+				std::println(std::cerr, "operate reference count on a wrong thread");
+				std::terminate();
+			}
+#endif
+
+			++reference_count_;
+		}
+
+		bool decr_ref() noexcept{
+#ifdef THREAD_CHECK
+			if(created_thread_id_ != std::this_thread::get_id()){
+				std::println(std::cerr, "operate reference count on a wrong thread");
+				std::terminate();
+			}
+#endif
+
+			--reference_count_;
+			return reference_count_ == 0;
+		}
+
+		bool is_droppable() const noexcept{
+#ifdef THREAD_CHECK
+			if(created_thread_id_ != std::this_thread::get_id()){
+				std::println(std::cerr, "operate reference count on a wrong thread");
+				std::terminate();
+			}
+#endif
+
+			return reference_count_ == 0;
+		}
 
 		[[nodiscard]] propagate_behavior get_propagate_type() const noexcept{
 			return data_propagate_type_;
@@ -208,7 +252,7 @@ namespace mo_yanxi::react_flow{
 			return data_state::failed;
 		}
 
-		[[nodiscard]] virtual std::span<const node_ptr> get_inputs() const noexcept{
+		[[nodiscard]] virtual std::span<const raw_node_ptr> get_inputs() const noexcept{
 			return {};
 		}
 
@@ -543,7 +587,7 @@ namespace mo_yanxi::react_flow{
 	template <typename T>
 	struct terminal : type_aware_node<T>{
 	private:
-		node_ptr parent{};
+		raw_node_ptr parent{};
 
 	protected:
 		[[nodiscard]] explicit terminal(propagate_behavior data_propagate_type)
@@ -556,7 +600,7 @@ namespace mo_yanxi::react_flow{
 
 		static constexpr data_type_index node_data_type_index = unstable_type_identity_of<T>();
 
-		[[nodiscard]] std::span<const node_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
 			return {&parent, 1};
 		}
 
@@ -701,6 +745,17 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 	};
+
+
+	void node_pointer::incr_() const noexcept{
+		node_->incr_ref();
+	}
+
+	void node_pointer::decr_() const noexcept{
+		if(node_->decr_ref()){
+			delete node_;
+		}
+	}
 
 	template <typename T>
 	void successor_entry::update(manager& manager, push_data_storage<T>& data) const{

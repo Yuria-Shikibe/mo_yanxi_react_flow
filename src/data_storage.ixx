@@ -1,7 +1,9 @@
 module;
 
 #include <cassert>
-#define EMPTY_BUFFER_INIT /*[[indeterminate]]*/
+#include <mo_yanxi/enum_operator_gen.hpp>
+#include <mo_yanxi/adapted_attributes.hpp>
+
 
 export module mo_yanxi.react_flow.data_storage;
 
@@ -15,6 +17,56 @@ namespace mo_yanxi::react_flow{
 		failed
 	};
 
+
+	ENUM_COMPARISON_OPERATORS(data_state, export)
+
+	export enum struct async_type : std::uint8_t{
+		/**
+		 * @brief When a new update is arrived and the previous is not done yet, cancel the previous
+		 */
+		async_latest,
+
+		/**
+		 * @brief When a new update is arrived and the previous is not done yet, just dispatch again
+		 */
+		async_all,
+
+		def = async_latest
+	};
+
+	export enum struct trigger_type : std::uint8_t{
+		disabled,
+		on_pulse,
+		active
+	};
+
+	export enum struct propagate_behavior : std::uint8_t{
+		eager,
+		lazy,
+		pulse
+	};
+
+	export enum struct data_pending_state : std::uint8_t{
+		done,
+		expired,
+		waiting_pulse
+	};
+
+
+	template <std::ranges::input_range Rng>
+		requires (std::is_scoped_enum_v<std::ranges::range_value_t<Rng>>)
+	std::ranges::range_value_t<Rng> merge_data_state(const Rng& states) noexcept{
+		return std::ranges::max(states, std::ranges::less{}, [](const auto v){
+			return std::to_underlying(v);
+		});
+	}
+
+	template <typename T>
+	void update_state_enum(T& state, T other) noexcept{
+		state = T{std::max(std::to_underlying(state), std::to_underlying(other))};
+	}
+
+
 	export
 	template <typename T>
 	struct request_result{
@@ -23,6 +75,7 @@ namespace mo_yanxi::react_flow{
 	private:
 		union{
 			T value_;
+			struct {} uninit_{};
 		};
 
 		enum internal_data_state_ : std::underlying_type_t<data_state>{
@@ -274,7 +327,7 @@ namespace mo_yanxi::react_flow{
 			[[nodiscard]] constexpr U(){
 			}
 
-			[[nodiscard]] constexpr U(const T* r) noexcept : ref_ptr{r}{
+			[[nodiscard]] explicit(false) constexpr U(const T* r) noexcept : ref_ptr{r}{
 			}
 
 			constexpr ~U(){
@@ -445,7 +498,7 @@ namespace mo_yanxi::react_flow{
 		using value_type = std::conditional_t<is_small_object, T, data_package<T>>;
 
 	private:
-		value_type storage_;
+		value_type storage_{};
 
 	public:
 		[[nodiscard]] T* get_mut() noexcept{
@@ -531,6 +584,31 @@ namespace mo_yanxi::react_flow{
 		}
 	};
 
+
+	//TODO return both data and state
+	export
+	template <typename T>
+	using request_pass_handle = request_result<data_package_optimal<T>>;
+
+	export
+	template <typename T>
+	[[nodiscard]] request_pass_handle<T> make_request_handle_unexpected(data_state error) noexcept{
+		return request_pass_handle<T>{error};
+	}
+
+	export
+	template <typename T>
+	[[nodiscard]] request_pass_handle<T> make_request_handle_expected(T&& data, bool isExpired) noexcept{
+		return request_pass_handle<T>(isExpired, std::in_place, std::forward<T>(data));
+	}
+
+	export
+	template <typename T>
+	[[nodiscard]] request_pass_handle<T> make_request_handle_expected_ref(const T& data, bool isExpired) noexcept{
+		return request_pass_handle<T>(isExpired, data);
+	}
+
+
 	//Legacy
 	template <typename T>
 	struct data_storage_view;
@@ -553,7 +631,7 @@ namespace mo_yanxi::react_flow{
 		void (*destructor_func)(void*) noexcept = nullptr;
 		void* reference_ptr{};
 
-		alignas(local_storage_align) std::byte local_buf_[local_storage_size] EMPTY_BUFFER_INIT;
+		alignas(local_storage_align) std::byte local_buf_[local_storage_size] ADAPTED_INDETERMINATE;
 
 	public:
 		[[nodiscard]] bool empty() const noexcept{

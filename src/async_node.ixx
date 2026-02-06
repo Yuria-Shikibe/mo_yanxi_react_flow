@@ -34,7 +34,7 @@ namespace mo_yanxi::react_flow{
 		using arg_type = std::tuple<std::remove_const_t<Args>...>;
 
 	private:
-		std::array<node_ptr, arg_count> parents_{};
+		std::array<raw_node_ptr, arg_count> parents_{};
 		std::vector<successor_entry> successors_{};
 
 		//TODO successor_that_receives progress
@@ -120,7 +120,7 @@ namespace mo_yanxi::react_flow{
 
 		void disconnect_self_from_context() noexcept final{
 			for(std::size_t i = 0; i < parents_.size(); ++i){
-				if(node_ptr& ptr = parents_[i]){
+				if(raw_node_ptr& ptr = parents_[i]){
 					ptr->erase_successors_single_edge(i, *this);
 					ptr = nullptr;
 				}
@@ -131,7 +131,7 @@ namespace mo_yanxi::react_flow{
 			successors_.clear();
 		}
 
-		[[nodiscard]] std::span<const node_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
 			return parents_;
 		}
 
