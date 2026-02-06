@@ -16,7 +16,7 @@ namespace mo_yanxi::react_flow{
 	export constexpr progress_type f32_to_progress_scl = std::numeric_limits<unsigned short>::max();
 	export constexpr progress_type invalid_progress = std::numeric_limits<progress_type>::max();
 
-	struct progress_check{
+	export struct progress_check{
 		bool changed;
 		progress_type progress;
 
@@ -95,7 +95,7 @@ namespace mo_yanxi::react_flow{
 			//it should use relax principally, but consider that someone want to do sync depends on the progress, make it acq rel
 			const auto cur = progress.load(std::memory_order_acquire);
 			const auto last = std::exchange(last_progress, cur);
-			return {cur == last, cur};
+			return {cur != last, cur};
 		}
 	};
 

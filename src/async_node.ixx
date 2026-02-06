@@ -367,6 +367,7 @@ namespace mo_yanxi::react_flow{
 	private:
 		using type = async_node<T, Args...>;
 		node_pointer modifier_{};
+		std::stop_token stop_token_;
 
 		std::tuple<Args...> arguments_{};
 		std::optional<T> rst_cache_{};
@@ -380,7 +381,8 @@ namespace mo_yanxi::react_flow{
 	public:
 		[[nodiscard]] explicit async_node_task(type& modifier, std::span<successor_entry> subscribers_, std::tuple<Args...>&& args) :
 			progressed_async_node_base{!subscribers_.empty()},
-			modifier_(std::addressof(modifier)), arguments_{std::move(args)}, progress_subscribers_(std::from_range, subscribers_){
+			modifier_(std::addressof(modifier)), stop_token_(modifier.get_stop_token()),
+			arguments_{std::move(args)}, progress_subscribers_(std::from_range, subscribers_){
 		}
 
 		void on_finish(manager& manager) override{
@@ -407,7 +409,7 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		void execute() override{
-			rst_cache_ = get().apply(async_context{get().get_stop_token(), this}, std::move(arguments_));
+			rst_cache_ = get().apply(async_context{stop_token_, this}, std::move(arguments_));
 		}
 	};
 
