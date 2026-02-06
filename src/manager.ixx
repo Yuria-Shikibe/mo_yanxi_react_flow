@@ -306,11 +306,11 @@ namespace mo_yanxi::react_flow{
 				if(task){
 					manager.under_processing_.store(task.value().get(), std::memory_order_release);
 					task.value()->execute();
+					manager.under_processing_.store(nullptr, std::memory_order_release);
 					{
 						std::lock_guard lg{manager.done_mutex_};
 						manager.done_[1].push_back(std::move(task.value()));
 					}
-					manager.under_processing_.store(nullptr, std::memory_order_release);
 
 				} else{
 					return;
