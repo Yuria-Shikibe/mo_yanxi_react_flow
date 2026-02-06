@@ -50,6 +50,10 @@ namespace mo_yanxi::react_flow{
 			incr_();
 		}
 
+		inline ~node_pointer(){
+			if(node_)decr_();
+		}
+
 		inline explicit operator bool() const noexcept{
 			return node_ != nullptr;
 		}
@@ -81,6 +85,7 @@ namespace mo_yanxi::react_flow{
 
 		inline node_pointer& operator=(node_pointer&& other) noexcept{
 			if(this == &other) return *this;
+			if(node_)decr_();
 			node_ = std::exchange(other.node_, nullptr);
 			return *this;
 		}

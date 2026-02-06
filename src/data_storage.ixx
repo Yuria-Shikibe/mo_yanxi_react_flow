@@ -61,6 +61,7 @@ namespace mo_yanxi::react_flow{
 		});
 	}
 
+	export
 	template <typename T>
 	void update_state_enum(T& state, T other) noexcept{
 		state = T{std::max(std::to_underlying(state), std::to_underlying(other))};
