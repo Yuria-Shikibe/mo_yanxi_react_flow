@@ -189,9 +189,6 @@ namespace mo_yanxi::react_flow{
 		template <typename T>
 		friend struct intermediate_cache;
 
-		template <typename Ret, typename... Args>
-		friend struct async_node;
-
 	private:
 		std::size_t reference_count_{};
 
@@ -375,7 +372,7 @@ namespace mo_yanxi::react_flow{
 		virtual void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept{
 		}
 
-	protected:
+	public:
 		//TODO disconnected conflicted
 		virtual bool connect_successors_impl(std::size_t slot, node& post){
 			return false;
