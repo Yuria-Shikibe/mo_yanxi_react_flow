@@ -79,8 +79,8 @@ TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     bool updated = false;
     auto& t = mgr.add_node<TestListener>(propagate_behavior::eager, updated, "Single");
 
-    p.connect_successors(trans);
-    trans.connect_successors(t);
+    p.connect_successor(trans);
+    trans.connect_successor(t);
 
     MoveTracker source("payload");
     ASSERT_EQ(source.value, "payload");
@@ -128,11 +128,11 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
     auto& t2 = mgr.add_node<TestListener>(propagate_behavior::eager, t2_updated, "T2");
     auto& t3 = mgr.add_node<TestListener>(propagate_behavior::eager, t3_updated, "T3");
 
-    p.connect_successors(trans);
+    p.connect_successor(trans);
 
-    trans.connect_successors(t1);
-    trans.connect_successors(t2);
-    trans.connect_successors(t3);
+    trans.connect_successor(t1);
+    trans.connect_successor(t2);
+    trans.connect_successor(t3);
 
     MoveTracker source("payload");
 

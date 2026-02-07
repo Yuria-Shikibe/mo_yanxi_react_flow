@@ -29,9 +29,9 @@ void connect_chain(const Rng& chain){
 #endif
 
 			if constexpr (std::same_as<decltype(l), node&>){
-				l.connect_successors(r);
+				l.connect_successor(r);
 			}else if(std::same_as<decltype(*l), node&>){
-				(*l).connect_successors(*r);
+				(*l).connect_successor(*r);
 			}
 
 		}

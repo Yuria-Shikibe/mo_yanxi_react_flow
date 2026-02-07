@@ -6,7 +6,6 @@ import std;
 
 using namespace mo_yanxi::react_flow;
 
-/*
 TEST(AsyncNodeTest, AsyncCancelTest) {
     manager mgr;
     auto& source = mgr.add_node<provider_cached<int>>();
@@ -38,8 +37,8 @@ TEST(AsyncNodeTest, AsyncCancelTest) {
         result = v;
     }));
 
-    source.connect_successors(processor);
-    processor.connect_successors(listener);
+    source.connect_successor(processor);
+    processor.connect_successor(listener);
 
     // Start task
     std::thread t([&]{
@@ -97,8 +96,8 @@ TEST(AsyncNodeTest, AsyncFloodLatestTest) {
         if (v != -1) last_value = v;
     }));
 
-    source.connect_successors(processor);
-    processor.connect_successors(listener);
+    source.connect_successor(processor);
+    processor.connect_successor(listener);
 
     // Flood updates
     std::thread t([&]{
@@ -140,8 +139,8 @@ TEST(AsyncNodeTest, AsyncFloodAllTest) {
 
     auto& listener = mgr.add_node(make_listener([&](int v){}));
 
-    source.connect_successors(processor);
-    processor.connect_successors(listener);
+    source.connect_successor(processor);
+    processor.connect_successor(listener);
 
     int total_updates = 10;
     std::thread t([&]{
@@ -182,8 +181,8 @@ TEST(AsyncNodeTest, AsyncDisconnectTest) {
 
     auto& listener = mgr.add_node(make_listener([&](int v){}));
 
-    source.connect_successors(processor);
-    processor.connect_successors(listener);
+    source.connect_successor(processor);
+    processor.connect_successor(listener);
 
     mgr.push_posted_act([&]{
         source.update_value(1);
@@ -197,8 +196,8 @@ TEST(AsyncNodeTest, AsyncDisconnectTest) {
 
     // Disconnect while running
     mgr.push_posted_act([&]{
-        source.disconnect_successors(processor);
-        processor.disconnect_successors(listener);
+        source.disconnect_successor(processor);
+        processor.disconnect_successor(listener);
         // Optionally erase node
         mgr.erase_node(processor);
     });
@@ -239,7 +238,7 @@ TEST(AsyncNodeTest, AsyncProgressTest) {
         }
     }));
 
-    source.connect_successors(processor); // ADDED THIS
+    source.connect_successor(processor); // ADDED THIS
     processor.add_progress_receiver(progress_listener);
 
     mgr.push_posted_act([&]{
@@ -256,4 +255,3 @@ TEST(AsyncNodeTest, AsyncProgressTest) {
     EXPECT_TRUE(progress_received);
     EXPECT_GE(last_progress, 1.0f);
 }
-*/

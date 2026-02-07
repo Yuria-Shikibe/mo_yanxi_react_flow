@@ -1,4 +1,3 @@
----@diagnostic disable: undefined-global
 add_rules("mode.debug", "mode.release")
 set_arch("x64")
 set_encodings("utf-8")
@@ -25,20 +24,13 @@ package(pkg_name)
     end
 
     set_policy("platform.longpaths", true)
-    add_configs("add_legacy", {description = "Use Legacy Components.", default = false, type = "boolean"})
-    add_configs("add_latest", {description = "Use Latest Components.", default = false, type = "boolean"})
-
 
     on_install(function (package)
-        local configs = {}
-        configs.add_latest = package:config("add_latest")
-        configs.add_legacy = package:config("add_legacy")
-
-        import("package.tools.xmake").install(package, configs)
+        import("package.tools.xmake").install(package, {add_legacy = false, add_latest = false})
     end)
 package_end()
 
-add_requires(pkg_name, {configs = {add_legacy = false, add_latest = false}})
+add_requires(pkg_name)
 add_requires("gtest")
 
 if is_plat("linux") then
@@ -55,10 +47,9 @@ target("mo_yanxi.react_flow")
     add_packages(pkg_name, {public = true})
     add_files("src/**.ixx", {public = true})
 
-
+    -- used for cmakelist generation
     if is_mode("cmake_gen") then
         on_load(function (target)
-            -- 1. 获取依赖包对象
             local pkg = target:pkg(pkg_name)
 
             if pkg then

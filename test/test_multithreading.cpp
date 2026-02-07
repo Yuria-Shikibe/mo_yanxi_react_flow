@@ -14,7 +14,7 @@ TEST(MultithreadingTest, AsyncUpdate) {
         received_value.store(v);
     }));
 
-    p.connect_successors(t);
+    p.connect_successor(t);
 
     std::jthread worker([&]{
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -45,7 +45,7 @@ TEST(MultithreadingTest, MultipleThreads) {
         sum.fetch_add(v);
     }));
 
-    p.connect_successors(t);
+    p.connect_successor(t);
 
     const int num_threads = 10;
     std::vector<std::jthread> threads;

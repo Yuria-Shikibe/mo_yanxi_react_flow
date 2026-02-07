@@ -15,7 +15,7 @@ TEST(PropagationTest, EagerPropagation) {
         received_value = v;
     }));
 
-    p.connect_successors(t);
+    p.connect_successor(t);
     
     p.update_value(42);
     EXPECT_EQ(received_value, 42);
@@ -38,8 +38,8 @@ TEST(PropagationTest, LazyPropagation) {
     // terminal_cached with lazy behavior
     auto& term = mgr.add_node<terminal_cached<int>>(propagate_behavior::lazy);
     
-    p.connect_successors(trans);
-    trans.connect_successors(term);
+    p.connect_successor(trans);
+    trans.connect_successor(term);
     
     p.update_value(10);
     
@@ -71,7 +71,7 @@ TEST(PropagationTest, PulsePropagation) {
         received_value = v;
     }));
 
-    p.connect_successors(t);
+    p.connect_successor(t);
     
     p.update_value(42);
     // Not updated yet

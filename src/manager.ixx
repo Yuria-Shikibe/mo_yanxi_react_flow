@@ -7,6 +7,7 @@ export module mo_yanxi.react_flow:manager;
 import :node_interface;
 import mo_yanxi.utility;
 import mo_yanxi.concurrent.mpsc_queue;
+import mo_yanxi.flat_set;
 import mo_yanxi.algo;
 
 namespace mo_yanxi::react_flow{
@@ -112,25 +113,23 @@ namespace mo_yanxi::react_flow{
 	using AsyncFuncType = std::function<void()>;
 #endif
 
+	//TODO support move?
 
 	export struct manager{
 	private:
 		std::vector<node_pointer> nodes_anonymous_{};
 		std::vector<node*> pulse_subscriber_{};
-		std::unordered_set<node*> expired_nodes{};
+		linear_flat_set<std::vector<node*>> expired_nodes{};
 
 		using async_task_queue = ccur::mpsc_queue<AsyncFuncType>;
 		async_task_queue pending_received_updates_{};
 		async_task_queue::container_type recycled_queue_container_{};
 
 		ccur::mpsc_queue<std::unique_ptr<async_task_base>> pending_async_modifiers_{};
-		std::mutex done_mutex_{};
 		std::atomic<async_task_base*> under_processing_{};
+
+		std::mutex done_mutex_{};
 		std::vector<std::unique_ptr<async_task_base>> done_[2]{};
-
-		// std::mutex async_request_mutex_{};
-		// std::vector<std::packaged_task<void()>> async_request_[2]{};
-
 
 		std::jthread async_thread_{};
 
@@ -191,7 +190,7 @@ namespace mo_yanxi::react_flow{
 
 		bool erase_node(node& n) noexcept
 		try{
-			return expired_nodes.insert(std::addressof(n)).second;
+			return expired_nodes.insert(std::addressof(n));
 		} catch(const std::bad_alloc&){
 			pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
 				return ptr->get_owner_if_node() == &n;
@@ -295,6 +294,7 @@ namespace mo_yanxi::react_flow{
 				pending_async_modifiers_.notify();
 				async_thread_.join();
 			}
+
 		}
 
 	private:

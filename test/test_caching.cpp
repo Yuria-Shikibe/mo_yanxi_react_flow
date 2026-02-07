@@ -26,7 +26,7 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
         return v;
     }));
     
-    p.connect_successors(upstream);
+    p.connect_successor(upstream);
     
     // Case 1: Transient downstream
     int transient_compute_count = 0;
@@ -35,7 +35,7 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
         return v;
     }));
     
-    upstream.connect_successors(downstream_transient);
+    upstream.connect_successor(downstream_transient);
     
     p.update_value(1);
     
@@ -51,7 +51,7 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
     
     
     // Case 2: Argument Cached downstream
-    upstream.disconnect_successors(downstream_transient);
+    upstream.disconnect_successor(downstream_transient);
     upstream_compute_count = 0; // Reset
     
     int cached_compute_count = 0;
@@ -68,7 +68,7 @@ TEST(CachingTest, ModifierTransientVsCachedArguments) {
     auto& downstream_cached = mgr.add_node<my_cached_node>(propagate_behavior::lazy);
     downstream_cached.counter = &cached_compute_count;
     
-    upstream.connect_successors(downstream_cached);
+    upstream.connect_successor(downstream_cached);
     
     // Need to trigger update to mark dirty? 
     // update_value was called before connection.
@@ -98,8 +98,8 @@ TEST(CachingTest, TerminalCached) {
     
     auto& term = mgr.add_node<terminal_cached<int>>(propagate_behavior::lazy);
     
-    p.connect_successors(trans);
-    trans.connect_successors(term);
+    p.connect_successor(trans);
+    trans.connect_successor(term);
     
     p.update_value(10);
     

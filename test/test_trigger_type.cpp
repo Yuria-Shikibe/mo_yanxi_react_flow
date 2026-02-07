@@ -18,7 +18,7 @@ TEST(TriggerTypeTest, Disabled) {
     auto& async_n = dynamic_cast<async_node<int, int>&>(node);
     async_n.set_trigger_type(trigger_type::disabled);
 
-    p.connect_successors(node);
+    p.connect_successor(node);
 
     p.update_value(1);
 
@@ -44,7 +44,7 @@ TEST(TriggerTypeTest, OnPulse) {
 
     node.set_trigger_type(trigger_type::on_pulse);
 
-    p.connect_successors(node);
+    p.connect_successor(node);
 
     p.update_value(1);
 
@@ -80,7 +80,7 @@ TEST(TriggerTypeTest, OnPulseDelayed) {
 
     node.set_trigger_type(trigger_type::on_pulse);
 
-    p.connect_successors(node);
+    p.connect_successor(node);
 
     p.update_value(1);
 

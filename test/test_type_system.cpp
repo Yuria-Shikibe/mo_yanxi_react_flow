@@ -10,7 +10,7 @@ TEST(TypeSystemTest, CompatibleTypes) {
     auto& p = mgr.add_node<provider_cached<int>>();
     auto& t = mgr.add_node(make_listener([&](int v){}));
     
-    EXPECT_NO_THROW(p.connect_successors(t));
+    EXPECT_NO_THROW(p.connect_successor(t));
 }
 
 TEST(TypeSystemTest, IncompatibleTypes) {
@@ -19,7 +19,7 @@ TEST(TypeSystemTest, IncompatibleTypes) {
     auto& t = mgr.add_node(make_listener([&](float v){}));
     
     // Should throw invalid_node because type IDs are different
-    EXPECT_THROW(p.connect_successors(t), invalid_node_error);
+    EXPECT_THROW(p.connect_successor(t), invalid_node_error);
 }
 
 TEST(TypeSystemTest, ImplicitConversionFails) {
@@ -28,5 +28,5 @@ TEST(TypeSystemTest, ImplicitConversionFails) {
     auto& p = mgr.add_node<provider_cached<int>>();
     auto& t = mgr.add_node(make_listener([](long){}));
 
-    EXPECT_THROW(p.connect_successors(t), invalid_node_error);
+    EXPECT_THROW(p.connect_successor(t), invalid_node_error);
 }

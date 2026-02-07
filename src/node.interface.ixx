@@ -287,7 +287,7 @@ namespace mo_yanxi::react_flow{
 			return prev.connect_successors_unchecked(slot_of_successor, *this);
 		}
 
-		bool connect_successors(const std::size_t slot, node& post){
+		bool connect_successor(const std::size_t slot, node& post){
 #if MO_YANXI_DATA_FLOW_ENABLE_RING_CHECK
 			if(is_ring_bridge(this, &post)){
 				throw invalid_node_error{"ring detected"};
@@ -303,10 +303,10 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool connect_predecessor(const std::size_t slot, node& prev){
-			return prev.connect_successors(slot, *this);
+			return prev.connect_successor(slot, *this);
 		}
 
-		bool connect_successors(node& post){
+		bool connect_successor(node& post){
 #if MO_YANXI_DATA_FLOW_ENABLE_RING_CHECK
 			if(is_ring_bridge(this, &post)){
 				throw invalid_node_error{"ring detected"};
@@ -322,10 +322,10 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool connect_predecessor(node& prev){
-			return prev.connect_successors(*this);
+			return prev.connect_successor(*this);
 		}
 
-		bool disconnect_successors(const std::size_t slot, node& post) noexcept{
+		bool disconnect_successor(const std::size_t slot, node& post) noexcept{
 			if(erase_successors_single_edge(slot, post)){
 				post.erase_predecessor_single_edge(slot, *this);
 				return true;
@@ -334,11 +334,10 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool disconnect_predecessor(const std::size_t slot, node& prev) noexcept{
-			return prev.disconnect_successors(slot, *this);
+			return prev.disconnect_successor(slot, *this);
 		}
 
-
-		bool disconnect_successors(node& post){
+		bool disconnect_successor(node& post){
 			const auto rng = post.get_in_socket_type_index();
 			if(auto itr = std::ranges::find(rng, get_out_socket_type_index()); itr != rng.end()){
 				auto slot = std::ranges::distance(rng.begin(), itr);
@@ -354,7 +353,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool disconnect_predecessor(node& prev){
-			return prev.disconnect_successors(*this);
+			return prev.disconnect_successor(*this);
 		}
 
 		virtual void disconnect_self_from_context() noexcept{
@@ -375,7 +374,7 @@ namespace mo_yanxi::react_flow{
 		virtual void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept{
 		}
 
-	public:
+	protected:
 		//TODO disconnected conflicted
 		virtual bool connect_successors_impl(std::size_t slot, node& post){
 			return false;
@@ -413,7 +412,7 @@ namespace mo_yanxi::react_flow{
 
 		/**
 		 *
-		 * @brief Only notify the data has changed, used for lazy nodes. Should be mutually exclusive with update when propagate.
+		 * @brief Only notify the data has changed, used for lazy nodes. Should be mutually exclusive with update when propagated.
 		 *
 		 */
 		virtual void mark_updated(std::size_t from_index) noexcept{
@@ -438,6 +437,35 @@ namespace mo_yanxi::react_flow{
 			return std::erase_if(successors, [&](const successor_entry& e){
 				return e.index == slot && e.entity == &next;
 			});
+		}
+	};
+
+	/**
+	 * @brief auto disconnect the node from context on destruction
+	 * @tparam T node type
+	 */
+	export
+	template <std::derived_from<node> T>
+	struct node_holder{
+		T node;
+
+		~node_holder(){
+			node.disconnect_self_from_context();
+		}
+
+		node_holder() = default;
+
+		template <typename ...Args>
+		explicit(false) node_holder(std::in_place_type_t<T>, Args&& ...args) : node(std::forward<Args>(args)...){}
+
+		template <typename S>
+		auto* operator->(this S& self) noexcept{
+			return &self.node;
+		}
+
+		template <typename S>
+		auto&& operator*(this S&& self) noexcept{
+			return std::forward_like<S>(self.node);
 		}
 	};
 
@@ -527,13 +555,10 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] provider_general() = default;
 
-
-		[[nodiscard]] explicit provider_general(manager& manager) : manager_(std::addressof(manager)){
-		}
-
 	protected:
-		[[nodiscard]] explicit provider_general(manager& manager, propagate_behavior propagate_type)
-			: type_aware_node<T>{propagate_type}, manager_(std::addressof(manager)){
+		//this class should always be eager, make it protected
+		[[nodiscard]] explicit provider_general( propagate_behavior propagate_type)
+			: type_aware_node<T>{propagate_type}{
 		}
 
 	public:
@@ -548,7 +573,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 		[[nodiscard]] std::span<const data_type_index> get_in_socket_type_index() const noexcept final{
-			return std::span{&node_data_type_index, 1};
+			return {};
 		}
 
 
@@ -561,6 +586,10 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] std::span<const successor_entry> get_outputs() const noexcept final{
 			return successors;
+		}
+
+		request_pass_handle<T> request_raw(bool allow_expired) override{
+			return make_request_handle_unexpected<T>(data_state::failed);
 		}
 
 	private:
@@ -580,7 +609,6 @@ namespace mo_yanxi::react_flow{
 		}
 
 	protected:
-		manager* manager_{};
 		std::vector<successor_entry> successors{};
 
 		virtual void on_push(void* in_data){
@@ -668,7 +696,9 @@ namespace mo_yanxi::react_flow{
 
 		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
 			assert(slot == 0);
-			if(parent == std::addressof(prev)) parent = {};
+			if(parent == std::addressof(prev)){
+				parent = {};
+			}
 		}
 
 

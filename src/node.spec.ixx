@@ -24,12 +24,8 @@ namespace mo_yanxi::react_flow{
 	public:
 		[[nodiscard]] provider_cached() = default;
 
-		[[nodiscard]] explicit provider_cached(manager& manager)
-			: provider_general<T>(manager){
-		}
-
-		[[nodiscard]] provider_cached(manager& manager, propagate_behavior propagate_type)
-			: provider_general<T>(manager, propagate_type){
+		[[nodiscard]] explicit provider_cached(propagate_behavior propagate_type)
+			: provider_general<T>(propagate_type){
 		}
 
 		void update_value(T&& value){
@@ -89,7 +85,6 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		void on_update(){
-			assert(this->manager_ != nullptr);
 			switch(this->data_propagate_type_){
 			case propagate_behavior::eager : this->data_pending_state_ = data_pending_state::done;
 				{

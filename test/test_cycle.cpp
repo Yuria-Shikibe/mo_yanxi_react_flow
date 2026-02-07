@@ -14,11 +14,11 @@ TEST(CycleTest, SimpleCycle) {
     auto& t2 = mgr.add_node(make_transformer(propagate_behavior::eager, [](int v){ return v; }));
 
     // t1 -> t2
-    t1.connect_successors(t2);
+    t1.connect_successor(t2);
 
     // t2 -> t1 (should fail)
     try {
-        t2.connect_successors(t1);
+        t2.connect_successor(t1);
         FAIL() << "Expected invalid_node exception";
     } catch (const invalid_node_error& e) {
         EXPECT_STREQ(e.what(), "ring detected");
@@ -33,7 +33,7 @@ TEST(CycleTest, SelfCycle) {
 
     // t1 -> t1 (should fail)
     try {
-        t1.connect_successors(t1);
+        t1.connect_successor(t1);
         FAIL() << "Expected invalid_node exception";
     } catch (const invalid_node_error& e) {
         EXPECT_STREQ(e.what(), "ring detected");
@@ -48,12 +48,12 @@ TEST(CycleTest, LargerCycle) {
     auto& t2 = mgr.add_node(make_transformer(propagate_behavior::eager, [](int v){ return v; }));
     auto& t3 = mgr.add_node(make_transformer(propagate_behavior::eager, [](int v){ return v; }));
 
-    t1.connect_successors(t2);
-    t2.connect_successors(t3);
+    t1.connect_successor(t2);
+    t2.connect_successor(t3);
 
     // t3 -> t1 (should fail)
     try {
-        t3.connect_successors(t1);
+        t3.connect_successor(t1);
         FAIL() << "Expected invalid_node exception";
     } catch (const invalid_node_error& e) {
         EXPECT_STREQ(e.what(), "ring detected");

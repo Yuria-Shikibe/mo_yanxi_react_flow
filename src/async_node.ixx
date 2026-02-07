@@ -38,20 +38,19 @@ namespace mo_yanxi::react_flow{
 		std::array<raw_node_ptr, arg_count> parents_{};
 		std::vector<successor_entry> successors_{};
 
-		//TODO successor_that_receives progress
-		std::vector<successor_entry> progress_receiver_{};
+		manager* manager_{};
 
-		// 异步控制状态
+		//TODO successor_that_receives progress
+		node_holder<provider_general<progress_check>> progress_provider_{};
+
 		async_type async_type_{async_type::def};
 		trigger_type trigger_type_{trigger_type::active};
 		std::size_t dispatched_count_{};
 		std::stop_source stop_source_{std::nostopstate};
 
-		// 缓存与脏标记 (原 async_node_cached 的成员)
 		std::bitset<arg_count> dirty_{};
 		arg_type arguments_{};
 
-		manager* manager_{};
 
 
 		/**
@@ -70,39 +69,14 @@ namespace mo_yanxi::react_flow{
 			: type_aware_node<Ret>(data_propagate_type), async_type_(async_type){
 		}
 
-		[[nodiscard]] explicit async_node(async_type async_type, manager& manager)
-			: async_type_(async_type), manager_(&manager){
+		[[nodiscard]] explicit async_node(manager& manager, async_type async_type)
+			: manager_(&manager), async_type_(async_type){
 		}
 
-		[[nodiscard]] explicit async_node(propagate_behavior data_propagate_type, async_type async_type, manager& manager)
-			: type_aware_node<Ret>(data_propagate_type), async_type_(async_type), manager_(&manager){
+		[[nodiscard]] explicit async_node(manager& manager, propagate_behavior data_propagate_type, async_type async_type)
+			: type_aware_node<Ret>(data_propagate_type), manager_(&manager), async_type_(async_type){
 		}
 
-		[[nodiscard]] async_node(const async_node& other, manager& manager)
-			: type_aware_node<Ret>(other),
-			parents_(other.parents_),
-			successors_(other.successors_),
-			progress_receiver_(other.progress_receiver_),
-			async_type_(other.async_type_),
-			trigger_type_(other.trigger_type_),
-			dirty_(other.dirty_),
-			arguments_(other.arguments_),
-			move_params_on_launch_(other.move_params_on_launch_),
-			manager_(&manager){
-		}
-
-		[[nodiscard]] async_node(async_node&& other, manager& manager) noexcept
-			: type_aware_node<Ret>(std::move(other)),
-			parents_(std::move(other.parents_)),
-			successors_(std::move(other.successors_)),
-			progress_receiver_(std::move(other.progress_receiver_)),
-			async_type_(other.async_type_),
-			trigger_type_(other.trigger_type_),
-			dirty_(other.dirty_),
-			arguments_(std::move(other.arguments_)),
-			move_params_on_launch_(other.move_params_on_launch_),
-			manager_(&manager){
-		}
 
 		[[nodiscard]] std::size_t get_dispatched() const noexcept{
 			return dispatched_count_;
@@ -125,17 +99,12 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool add_progress_receiver(node& node){
-			const auto rng = node.get_in_socket_type_index();
-			if(const auto itr = std::ranges::find(rng, unstable_type_identity_of<progress_check>()); itr != rng.end()){
-				const std::size_t idx = std::ranges::distance(rng.begin(), itr);
-				node.connect_predecessor_impl(idx, *this);
-				progress_receiver_.push_back({idx, node});
-				return true;
-			} else{
-				throw invalid_node_error{"Failed To Find Slot"};
-			}
+			return progress_provider_->connect_successor(node);
 		}
 
+		bool erase_progress_receiver(node& node){
+			return progress_provider_->disconnect_successor(node);
+		}
 
 		[[nodiscard]] std::stop_token get_stop_token() const noexcept{
 			assert(stop_source_.stop_possible());
@@ -272,7 +241,7 @@ namespace mo_yanxi::react_flow{
 			arg_type args_copy{};
 			// 使用合并后的 load_argument_to 逻辑
 			if(auto rst = this->load_argument_to(args_copy, true); rst != data_state::failed){
-				manager_->push_task(std::make_unique<async_node_task<Ret, Args...>>(*this, progress_receiver_, std::move(args_copy)));
+				manager_->push_task(std::make_unique<async_node_task<Ret, Args...>>(*this, std::move(args_copy)));
 			}
 		}
 
@@ -335,8 +304,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
-			if(node::try_erase(successors_, slot, post))return true;
-			return node::try_erase(progress_receiver_, slot, post);
+			return node::try_erase(successors_, slot, post);
 		}
 
 		void connect_predecessor_impl(std::size_t slot, node& prev) final{
@@ -413,17 +381,17 @@ namespace mo_yanxi::react_flow{
 		std::tuple<Args...> arguments_{};
 		std::optional<T> rst_cache_{};
 
-		std::vector<successor_entry> progress_subscribers_{};
+		provider_general<progress_check>* prov{};
 
 	private:
 		type& get() const noexcept{
 			return static_cast<type&>(*modifier_);
 		}
 	public:
-		[[nodiscard]] explicit async_node_task(type& modifier, std::span<successor_entry> subscribers_, std::tuple<Args...>&& args) :
-			progressed_async_node_base{!subscribers_.empty()},
+		[[nodiscard]] explicit async_node_task(type& modifier, std::tuple<Args...>&& args) :
+			progressed_async_node_base{!modifier.progress_provider_->get_outputs().empty()},
 			modifier_(std::addressof(modifier)), stop_token_(modifier.get_stop_token()),
-			arguments_{std::move(args)}, progress_subscribers_(std::from_range, subscribers_){
+			arguments_{std::move(args)}, prov(std::addressof(*modifier.progress_provider_)){
 		}
 
 		void on_finish(manager& manager) override{
@@ -441,10 +409,7 @@ namespace mo_yanxi::react_flow{
 
 		void on_update_check(manager& manager) override{
 			if(const auto prog = get_progress(); prog.changed){
-				push_data_storage<progress_check> data{prog};
-				for (const auto& progress_subscriber : progress_subscribers_){
-					progress_subscriber.update(data);
-				}
+				prov->update_value(prog);
 			}
 		}
 
