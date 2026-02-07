@@ -141,6 +141,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 		void process_node(node& node){
+			node.set_manager(*this);
 			if(node.get_propagate_type() == propagate_behavior::pulse){
 				pulse_subscriber_.push_back(&node);
 			}

@@ -51,6 +51,8 @@ namespace mo_yanxi::react_flow{
 		std::bitset<arg_count> dirty_{};
 		arg_type arguments_{};
 
+		manager* manager_{};
+
 
 		/**
 		 * @brief if true, the params is moved instead of copy on a task launch
@@ -66,6 +68,40 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] explicit async_node(propagate_behavior data_propagate_type, async_type async_type)
 			: type_aware_node<Ret>(data_propagate_type), async_type_(async_type){
+		}
+
+		[[nodiscard]] explicit async_node(async_type async_type, manager& manager)
+			: async_type_(async_type), manager_(&manager){
+		}
+
+		[[nodiscard]] explicit async_node(propagate_behavior data_propagate_type, async_type async_type, manager& manager)
+			: type_aware_node<Ret>(data_propagate_type), async_type_(async_type), manager_(&manager){
+		}
+
+		[[nodiscard]] async_node(const async_node& other, manager& manager)
+			: type_aware_node<Ret>(other),
+			parents_(other.parents_),
+			successors_(other.successors_),
+			progress_receiver_(other.progress_receiver_),
+			async_type_(other.async_type_),
+			trigger_type_(other.trigger_type_),
+			dirty_(other.dirty_),
+			arguments_(other.arguments_),
+			move_params_on_launch_(other.move_params_on_launch_),
+			manager_(&manager){
+		}
+
+		[[nodiscard]] async_node(async_node&& other, manager& manager) noexcept
+			: type_aware_node<Ret>(std::move(other)),
+			parents_(std::move(other.parents_)),
+			successors_(std::move(other.successors_)),
+			progress_receiver_(std::move(other.progress_receiver_)),
+			async_type_(other.async_type_),
+			trigger_type_(other.trigger_type_),
+			dirty_(other.dirty_),
+			arguments_(std::move(other.arguments_)),
+			move_params_on_launch_(other.move_params_on_launch_),
+			manager_(&manager){
 		}
 
 		[[nodiscard]] std::size_t get_dispatched() const noexcept{
@@ -132,6 +168,10 @@ namespace mo_yanxi::react_flow{
 			return std::span{in_type_indices};
 		}
 
+		void set_manager(manager& manager) override{
+			manager_ = &manager;
+		}
+
 		void disconnect_self_from_context() noexcept final{
 			for(std::size_t i = 0; i < parents_.size(); ++i){
 				if(raw_node_ptr& ptr = parents_[i]){
@@ -165,7 +205,7 @@ namespace mo_yanxi::react_flow{
 	protected:
 		// --- 数据推送与更新处理 (合并了 cached 的逻辑) ---
 
-		void on_push(manager& manager, std::size_t slot, push_data_obj& in_data) override{
+		void on_push(std::size_t slot, push_data_obj& in_data) override{
 			assert(slot < arg_count);
 
 			if(this->get_trigger_type() == trigger_type::disabled){
@@ -180,7 +220,7 @@ namespace mo_yanxi::react_flow{
 				if(this->get_trigger_type() == trigger_type::on_pulse){
 					this->set_trigger_type(trigger_type::disabled);
 				}
-				this->async_launch(manager);
+				this->async_launch();
 				break;
 			}
 			case propagate_behavior::lazy :{
@@ -212,10 +252,11 @@ namespace mo_yanxi::react_flow{
 			}
 
 			this->data_pending_state_ = data_pending_state::done;
-			this->async_launch(m);
+			this->async_launch();
 		}
 
-		void async_launch(manager& manager){
+		void async_launch(){
+			assert(manager_);
 			if(stop_source_.stop_possible()){
 				if(async_type_ == async_type::async_latest){
 					if(async_cancel()){
@@ -231,7 +272,7 @@ namespace mo_yanxi::react_flow{
 			arg_type args_copy{};
 			// 使用合并后的 load_argument_to 逻辑
 			if(auto rst = this->load_argument_to(args_copy, true); rst != data_state::failed){
-				manager.push_task(std::make_unique<async_node_task<Ret, Args...>>(*this, progress_receiver_, std::move(args_copy)));
+				manager_->push_task(std::make_unique<async_node_task<Ret, Args...>>(*this, progress_receiver_, std::move(args_copy)));
 			}
 		}
 
@@ -258,15 +299,15 @@ namespace mo_yanxi::react_flow{
 			return data_state::fresh;
 		}
 
-		void update_children(manager& manager, Ret& val) const{
+		void update_children(Ret& val) const{
 			std::size_t count = this->successors_.size();
 			for(std::size_t i = 0; i < count; ++i){
 				if(i == count - 1){
 					push_data_storage<Ret> data(std::move(val));
-					this->successors_[i].update(manager, data);
+					this->successors_[i].update(data);
 				} else{
 					push_data_storage<Ret> data(val);
-					this->successors_[i].update(manager, data);
+					this->successors_[i].update(data);
 				}
 			}
 		}
@@ -282,8 +323,8 @@ namespace mo_yanxi::react_flow{
 	private:
 		// --- 内部连接辅助 ---
 
-		void async_done(manager& manager, Ret& data) const{
-			this->update_children(manager, data);
+		void async_done(Ret& data) const{
+			this->update_children(data);
 		}
 
 		bool connect_successors_impl(std::size_t slot, node& post) final{
@@ -390,7 +431,7 @@ namespace mo_yanxi::react_flow{
 			set_progress_done();
 
 			if(rst_cache_){
-				get().async_done(manager, rst_cache_.value());
+				get().async_done(rst_cache_.value());
 			}
 		}
 
@@ -402,7 +443,7 @@ namespace mo_yanxi::react_flow{
 			if(const auto prog = get_progress(); prog.changed){
 				push_data_storage<progress_check> data{prog};
 				for (const auto& progress_subscriber : progress_subscribers_){
-					progress_subscriber.update(manager, data);
+					progress_subscriber.update(data);
 				}
 			}
 		}
@@ -446,6 +487,23 @@ namespace mo_yanxi::react_flow{
 		[[nodiscard]] explicit async_transformer(propagate_behavior data_propagate_type, async_type async_type,
 			const Fn& fn)
 			: async_transformer_base_t<Fn, Args...>(data_propagate_type, async_type), fn(fn){
+		}
+
+		[[nodiscard]] explicit async_transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn, manager& manager)
+			: async_transformer_base_t<Fn, Args...>(data_propagate_type, async_type, manager), fn(std::move(fn)){
+		}
+
+		[[nodiscard]] explicit async_transformer(propagate_behavior data_propagate_type, async_type async_type,
+			const Fn& fn, manager& manager)
+			: async_transformer_base_t<Fn, Args...>(data_propagate_type, async_type, manager), fn(fn){
+		}
+
+		[[nodiscard]] async_transformer(const async_transformer& other, manager& manager)
+			: async_transformer_base_t<Fn, Args...>(other, manager), fn(other.fn){
+		}
+
+		[[nodiscard]] async_transformer(async_transformer&& other, manager& manager)
+			: async_transformer_base_t<Fn, Args...>(std::move(other), manager), fn(std::move(other.fn)){
 		}
 
 	protected:
