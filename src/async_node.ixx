@@ -185,15 +185,18 @@ namespace mo_yanxi::react_flow{
 			if (trigger == trigger_type::disabled) {
 				return;
 			}
-			if (trigger == trigger_type::on_pulse) {
-				this->set_trigger_type(trigger_type::disabled);
-			}
 
 			switch (this->get_propagate_type()) {
 			case propagate_behavior::eager:
+				if (trigger == trigger_type::on_pulse) {
+					this->set_trigger_type(trigger_type::disabled);
+				}
 				this->async_launch();
 				break;
 			case propagate_behavior::lazy:
+				if (trigger == trigger_type::on_pulse) {
+					this->set_trigger_type(trigger_type::disabled);
+				}
 				mark_updated(-1);
 				break;
 			case propagate_behavior::pulse:

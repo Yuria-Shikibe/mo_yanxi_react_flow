@@ -120,11 +120,21 @@ namespace mo_yanxi::react_flow{
 		std::array<raw_node_ptr, arg_count> parents{};
 		std::vector<successor_entry> successors{};
 
+		trigger_type trigger_type_{trigger_type::active};
+
 	public:
 		[[nodiscard]] modifier_base() = default;
 
 		[[nodiscard]] explicit modifier_base(propagate_behavior data_propagate_type)
 			: type_aware_node<Ret>(data_propagate_type){
+		}
+
+		[[nodiscard]] trigger_type get_trigger_type() const noexcept{
+			return trigger_type_;
+		}
+
+		void set_trigger_type(const trigger_type trigger_type) noexcept{
+			trigger_type_ = trigger_type;
 		}
 
 		[[nodiscard]] bool is_isolated() const noexcept override{
@@ -238,6 +248,7 @@ namespace mo_yanxi::react_flow{
 							any_expired = true;
 						}
 						std::get<I>(arguments) = std::move(rst).value().fetch().value();
+						check_and_update_trigger<I>(std::get<I>(arguments));
 						return true;
 					}
 					return false;
@@ -246,6 +257,14 @@ namespace mo_yanxi::react_flow{
 
 			if(!success) return data_state::failed;
 			return any_expired ? data_state::expired : data_state::fresh;
+		}
+
+		template<std::size_t I>
+		void check_and_update_trigger(const auto& val) {
+			using type = std::tuple_element_t<I, arg_type>;
+			if constexpr(std::same_as<std::decay_t<type>, trigger_type>){
+				this->set_trigger_type(val);
+			}
 		}
 	};
 
@@ -288,6 +307,7 @@ namespace mo_yanxi::react_flow{
 							node& n = *nptr;
 							if(auto rst = node_type_cast<Ty>(n).request(true)){
 								std::get<I>(arguments) = std::move(rst).value();
+								this->template check_and_update_trigger<I>(std::get<I>(arguments));
 							} else{
 								any_failed = true;
 							}
@@ -301,8 +321,27 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 		void on_push(std::size_t target_index, push_data_obj& in_data) override{
+			// Try to update trigger_type first if applicable
+			[&, this]<std::size_t ... Idx>(std::index_sequence<Idx...>){
+				([&, this]<std::size_t I>(){
+					if(I == target_index){
+						using type = std::tuple_element_t<I, typename base::arg_type>;
+						if constexpr(std::same_as<std::decay_t<type>, trigger_type>){
+							this->set_trigger_type(push_data_cast<type>(in_data).get_copy());
+						}
+						return true;
+					}
+					return false;
+				}.template operator()<Idx>() || ...);
+			}(std::index_sequence_for<Args...>{});
+
+			if(this->get_trigger_type() == trigger_type::disabled) return;
+
 			switch(this->get_propagate_type()){
 			case propagate_behavior::eager :{
+				if(this->get_trigger_type() == trigger_type::on_pulse){
+					this->set_trigger_type(trigger_type::disabled);
+				}
 				typename base::arg_type arguments{};
 				const bool any_failed = this->pull_arguments(arguments, target_index, &in_data);
 
@@ -317,6 +356,9 @@ namespace mo_yanxi::react_flow{
 				break;
 			}
 			case propagate_behavior::lazy :{
+				if(this->get_trigger_type() == trigger_type::on_pulse){
+					this->set_trigger_type(trigger_type::disabled);
+				}
 				base::mark_updated(-1);
 				break;
 			}
@@ -330,6 +372,11 @@ namespace mo_yanxi::react_flow{
 
 		void on_pulse_received(manager& m) override{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
+
+			if(this->get_trigger_type() == trigger_type::disabled) return;
+			if(this->get_trigger_type() == trigger_type::on_pulse){
+				this->set_trigger_type(trigger_type::disabled);
+			}
 
 			typename base::arg_type arguments{};
 
@@ -381,13 +428,21 @@ namespace mo_yanxi::react_flow{
 			assert(slot < base::arg_count);
 			update_data(slot, in_data);
 
+			if(this->get_trigger_type() == trigger_type::disabled) return;
+
 			switch(this->get_propagate_type()){
 			case propagate_behavior::eager :{
+				if(this->get_trigger_type() == trigger_type::on_pulse){
+					this->set_trigger_type(trigger_type::disabled);
+				}
 				auto cur = this->apply(arguments);
 				this->base::update_children(cur);
 				break;
 			}
 			case propagate_behavior::lazy :{
+				if(this->get_trigger_type() == trigger_type::on_pulse){
+					this->set_trigger_type(trigger_type::disabled);
+				}
 				base::mark_updated(-1);
 				break;
 			}
@@ -419,6 +474,11 @@ namespace mo_yanxi::react_flow{
 		void on_pulse_received(manager& m) override{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
 
+			if(this->get_trigger_type() == trigger_type::disabled) return;
+			if(this->get_trigger_type() == trigger_type::on_pulse){
+				this->set_trigger_type(trigger_type::disabled);
+			}
+
 			this->data_pending_state_ = data_pending_state::done;
 			auto cur = this->apply(arguments);
 			this->base::update_children(cur);
@@ -436,6 +496,7 @@ namespace mo_yanxi::react_flow{
 					if(auto rst = node_type_cast<std::tuple_element_t<Idx, typename base::arg_type>>(n).request(false)){
 						dirty.set(I, false);
 						std::get<Idx>(arguments) = std::move(rst).value();
+						this->template check_and_update_trigger<I>(std::get<I>(arguments));
 					} else{
 						any_expired = true;
 					}
@@ -449,7 +510,7 @@ namespace mo_yanxi::react_flow{
 
 			[&, this]<std::size_t ... Idx>(std::index_sequence<Idx...>){
 				(void)((Idx == slot && (std::get<Idx>(arguments) = push_data_cast<std::tuple_element_t<Idx, typename
-					base::arg_type>>(in_data).get(), true)) || ...);
+					base::arg_type>>(in_data).get(), this->template check_and_update_trigger<Idx>(std::get<Idx>(arguments)), true)) || ...);
 			}(std::index_sequence_for<Args...>{});
 		}
 	};
