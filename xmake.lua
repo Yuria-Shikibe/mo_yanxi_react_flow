@@ -6,7 +6,7 @@ set_version("1.0")
 -- print(get_config("toolchain"))
 
 option("add_test")
-    set_default(false)
+    set_default(true)
     set_description("Add google test target")
 option_end()
 
