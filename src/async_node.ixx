@@ -18,9 +18,14 @@ namespace mo_yanxi::react_flow{
 
 	export struct async_context{
 		std::stop_token node_stop_token{};
+		std::stop_token manager_stop_token{};
+		progressed_async_node_base* task{};
+
 		//TODO add manager stop token?
 
-		progressed_async_node_base* task;
+		bool stop_requested() const noexcept{
+			return node_stop_token.stop_requested() || manager_stop_token.stop_requested();
+		}
 	};
 
 	export
@@ -119,8 +124,6 @@ namespace mo_yanxi::react_flow{
 			return true;
 		}
 
-		// --- 节点连接与状态接口 ---
-
 		[[nodiscard]] bool is_isolated() const noexcept override{
 			return std::ranges::none_of(parents_, std::identity{}) && successors_.empty();
 		}
@@ -172,7 +175,6 @@ namespace mo_yanxi::react_flow{
 
 
 	protected:
-		// --- 数据推送与更新处理 (合并了 cached 的逻辑) ---
 
 		void on_push(std::size_t slot, push_data_obj& in_data) override{
 			assert(slot < arg_count);
@@ -193,7 +195,7 @@ namespace mo_yanxi::react_flow{
 				break;
 			}
 			case propagate_behavior::lazy :{
-				this->mark_updated(-1); // 调用基类的 mark_updated 逻辑（此处为自身的实现）
+				this->mark_updated(-1);
 				break;
 			}
 			case propagate_behavior::pulse :{
@@ -268,32 +270,28 @@ namespace mo_yanxi::react_flow{
 			return data_state::fresh;
 		}
 
-		void update_children(Ret& val) const{
-			std::size_t count = this->successors_.size();
+		Ret apply(const async_context& ctx, arg_type&& args){
+			return [&, this]<std::size_t... Idx>(std::index_sequence<Idx...>){
+				return this->operator()(ctx, std::move(std::get<Idx>(args))...);
+			}(std::index_sequence_for<Args...>());
+		}
+
+		virtual Ret operator()(const async_context& ctx, Args&&... args) = 0;
+
+	private:
+		// --- 内部连接辅助 ---
+
+		void async_done(Ret&& val) const{
+			const std::size_t count = this->successors_.size();
 			for(std::size_t i = 0; i < count; ++i){
 				if(i == count - 1){
 					push_data_storage<Ret> data(std::move(val));
 					this->successors_[i].update(data);
 				} else{
-					push_data_storage<Ret> data(val);
+					push_data_storage<Ret> data(std::as_const(val));
 					this->successors_[i].update(data);
 				}
 			}
-		}
-
-		std::optional<Ret> apply(const async_context& ctx, arg_type&& args){
-			return [&, this]<std::size_t... Idx>(std::index_sequence<Idx...>) -> std::optional<Ret>{
-				return this->operator()(ctx, std::move(std::get<Idx>(args))...);
-			}(std::index_sequence_for<Args...>());
-		}
-
-		virtual std::optional<Ret> operator()(const async_context& ctx, Args&&... args) = 0;
-
-	private:
-		// --- 内部连接辅助 ---
-
-		void async_done(Ret& data) const{
-			this->update_children(data);
 		}
 
 		bool connect_successors_impl(std::size_t slot, node& post) final{
@@ -379,7 +377,7 @@ namespace mo_yanxi::react_flow{
 		std::stop_token stop_token_;
 
 		std::tuple<Args...> arguments_{};
-		std::optional<T> rst_cache_{};
+		T rst_cache_{};
 
 		provider_general<progress_check>* prov{};
 
@@ -398,9 +396,7 @@ namespace mo_yanxi::react_flow{
 			--get().dispatched_count_;
 			set_progress_done();
 
-			if(rst_cache_){
-				get().async_done(rst_cache_.value());
-			}
+			get().async_done(std::move(rst_cache_));
 		}
 
 		node* get_owner_if_node() noexcept override{
@@ -414,8 +410,8 @@ namespace mo_yanxi::react_flow{
 		}
 
 	private:
-		void execute() override{
-			rst_cache_ = get().apply(async_context{stop_token_, this}, std::move(arguments_));
+		void execute(const manager& manager) override{
+			rst_cache_ = get().apply(async_context{stop_token_, manager.get_manager_stop_token(), this}, std::move(arguments_));
 		}
 	};
 
@@ -474,7 +470,7 @@ namespace mo_yanxi::react_flow{
 	protected:
 		using ret_t = std::remove_cvref_t<typename decltype(test_invoke_result_async<Fn, Args&&...>())::type>;
 
-		std::optional<ret_t> operator()(
+		ret_t operator()(
 			const async_context& ctx,
 			Args&&... args) override{
 			if constexpr(std::invocable<Fn, const async_context&, Args&&...>){

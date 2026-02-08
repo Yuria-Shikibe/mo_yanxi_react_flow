@@ -42,7 +42,7 @@ void connect_chain(const Rng& chain){
 void example(){
 	manager manager{};
 
-	struct modifier_str_to_num : async_node<int, std::string>{
+	struct modifier_str_to_num : async_node<std::optional<int>, std::string>{
 		using async_node::async_node;
 	protected:
 		std::optional<int> operator()(const async_context& ctx, std::string&& arg) override{

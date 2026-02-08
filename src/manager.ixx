@@ -7,6 +7,7 @@ export module mo_yanxi.react_flow:manager;
 import :node_interface;
 import mo_yanxi.utility;
 import mo_yanxi.concurrent.mpsc_queue;
+import mo_yanxi.concurrent.atomic_double_buffer;
 import mo_yanxi.flat_set;
 import mo_yanxi.algo;
 
@@ -46,7 +47,7 @@ namespace mo_yanxi::react_flow{
 
 		virtual ~async_task_base() = default;
 
-		virtual void execute(){
+		virtual void execute(const manager& manager){
 		}
 
 		virtual void on_finish(manager& manager){
@@ -119,7 +120,7 @@ namespace mo_yanxi::react_flow{
 	private:
 		std::vector<node_pointer> nodes_anonymous_{};
 		std::vector<node*> pulse_subscriber_{};
-		linear_flat_set<std::vector<node*>> expired_nodes{};
+		linear_flat_set<std::vector<node*>> expired_nodes_{};
 
 		using async_task_queue = ccur::mpsc_queue<AsyncFuncType>;
 		async_task_queue pending_received_updates_{};
@@ -128,8 +129,10 @@ namespace mo_yanxi::react_flow{
 		ccur::mpsc_queue<std::unique_ptr<async_task_base>> pending_async_modifiers_{};
 		std::atomic<async_task_base*> under_processing_{};
 
-		std::mutex done_mutex_{};
-		std::vector<std::unique_ptr<async_task_base>> done_[2]{};
+		//TODO using small vector here?
+		using done_vec_type = std::vector<std::unique_ptr<async_task_base>>;
+		ccur::atomic_double_buffer<done_vec_type> async_done_buffer_{};
+		done_vec_type manager_thread_done_buffer_{};
 
 		std::jthread async_thread_{};
 
@@ -180,7 +183,7 @@ namespace mo_yanxi::react_flow{
 			try{
 				for(auto&& node : nodes_anonymous_){
 					if(node->is_isolated()){
-						expired_nodes.insert(node.get());
+						expired_nodes_.insert(node.get());
 					}
 				}
 			} catch(...){
@@ -190,17 +193,13 @@ namespace mo_yanxi::react_flow{
 
 		bool erase_node(node& n) noexcept
 		try{
-			return expired_nodes.insert(std::addressof(n));
+			//TODO cancel n's async task?
+
+			return expired_nodes_.insert(std::addressof(n));
 		} catch(const std::bad_alloc&){
 			pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
 				return ptr->get_owner_if_node() == &n;
 			});
-			{
-				std::lock_guard lg{done_mutex_};
-				algo::erase_unique_if_unstable(done_[1], [&](const std::unique_ptr<async_task_base>& ptr){
-					return ptr->get_owner_if_node() == &n;
-				});
-			}
 			algo::erase_unique_unstable(pulse_subscriber_, &n);
 			return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
 				return ptr.get() == &n;
@@ -221,31 +220,29 @@ namespace mo_yanxi::react_flow{
 			if(async_thread_.joinable()){
 				pending_async_modifiers_.push(std::move(task));
 			} else{
-				task->execute();
-				done_[1].push_back(std::move(task));
+				task->execute(*this);
+				task->on_finish(*this);
+
+				if(task->check_during_update_){
+					//should it check before finish?
+					task->on_update_check(*this);
+				}
 			}
 		}
 
 		void update(){
-			if(!expired_nodes.empty()){
-				{
-					std::lock_guard lg{done_mutex_};
-					std::erase_if(done_[1], [&](const std::unique_ptr<async_task_base>& ptr){
-						return expired_nodes.contains(ptr->get_owner_if_node());
-					});
-				}
-
+			if(!expired_nodes_.empty()){
 				pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
-					return expired_nodes.contains(ptr->get_owner_if_node());
+					return expired_nodes_.contains(ptr->get_owner_if_node());
 				});
 				algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
-					return expired_nodes.contains(ptr.get());
+					return expired_nodes_.contains(ptr.get());
 				});
 				algo::erase_unique_if_unstable(pulse_subscriber_, [&](node* ptr){
-					return expired_nodes.contains(ptr);
+					return expired_nodes_.contains(ptr);
 				});
 
-				expired_nodes.clear();
+				expired_nodes_.clear();
 			}
 
 			for(const auto& pulse_subscriber : pulse_subscriber_){
@@ -265,15 +262,12 @@ namespace mo_yanxi::react_flow{
 
 
 			{
-				{
-					std::lock_guard lg{done_mutex_};
-					if(done_[1].empty()){
-						goto RET;
-					}
-					std::swap(done_[0], done_[1]);
-				}
 
-				for(auto&& task_base : done_[0]){
+				async_done_buffer_.load([&](done_vec_type& vec){
+					std::ranges::swap(manager_thread_done_buffer_, vec);
+				});
+
+				for(auto&& task_base : manager_thread_done_buffer_){
 					task_base->on_finish(*this);
 
 					if(task_base->check_during_update_){
@@ -281,11 +275,15 @@ namespace mo_yanxi::react_flow{
 						task_base->on_update_check(*this);
 					}
 				}
-				done_[0].clear();
+				manager_thread_done_buffer_.clear();
 
 			RET:
 				(void)0;
 			}
+		}
+
+		std::stop_token get_manager_stop_token() const noexcept{
+			return async_thread_.get_stop_token();
 		}
 
 		~manager(){
@@ -306,12 +304,12 @@ namespace mo_yanxi::react_flow{
 
 				if(task){
 					manager.under_processing_.store(task.value().get(), std::memory_order_release);
-					task.value()->execute();
+					task.value()->execute(manager);
 					manager.under_processing_.store(nullptr, std::memory_order_release);
-					{
-						std::lock_guard lg{manager.done_mutex_};
-						manager.done_[1].push_back(std::move(task.value()));
-					}
+
+					manager.async_done_buffer_.modify([&](done_vec_type& vec){
+						vec.push_back(std::move(task.value()));
+					});
 
 				} else{
 					return;
