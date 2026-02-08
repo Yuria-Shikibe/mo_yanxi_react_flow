@@ -50,9 +50,15 @@ if has_config("add_test") then
 end
 
 if (get_config("toolchain") ~= "msvc") and has_config("use_libcxx") then
-    add_requireconfs("*", {configs = {cxflags = "-stdlib=libc++", ldflags = {"-stdlib=libc++", "-lc++abi", "-lunwind"}}})
-    add_cxflags("-stdlib=libc++")
-    add_ldflags("-stdlib=libc++", "-lc++abi", "-lunwind")
+    if is_plat("linux") then
+        add_requireconfs("*", {configs = {cxflags = "-stdlib=libc++", ldflags = {"-stdlib=libc++", "-lc++abi", "-lunwind"}}})
+        add_cxflags("-stdlib=libc++")
+        add_ldflags("-stdlib=libc++", "-lc++abi", "-lunwind")
+    else
+        add_requireconfs("*", {configs = {cxflags = "-stdlib=libc++", ldflags = {"-stdlib=libc++"}}})
+        add_cxflags("-stdlib=libc++")
+        add_ldflags("-stdlib=libc++")
+    end
 end
 
 
