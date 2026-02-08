@@ -179,34 +179,33 @@ namespace mo_yanxi::react_flow{
 		void on_push(std::size_t slot, push_data_obj& in_data) override{
 			assert(slot < arg_count);
 
-			if(this->get_trigger_type() == trigger_type::disabled){
-				mark_updated(slot);
-				return;
-			}
-
 			update_data(slot, in_data);
 
-			switch(this->get_propagate_type()){
-			case propagate_behavior::eager :{
-				if(this->get_trigger_type() == trigger_type::on_pulse){
-					this->set_trigger_type(trigger_type::disabled);
-				}
+			auto trigger = this->get_trigger_type();
+			if (trigger == trigger_type::disabled) {
+				return;
+			}
+			if (trigger == trigger_type::on_pulse) {
+				this->set_trigger_type(trigger_type::disabled);
+			}
+
+			switch (this->get_propagate_type()) {
+			case propagate_behavior::eager:
 				this->async_launch();
 				break;
-			}
-			case propagate_behavior::lazy :{
-				this->mark_updated(-1);
+			case propagate_behavior::lazy:
+				mark_updated(-1);
 				break;
-			}
-			case propagate_behavior::pulse :{
+			case propagate_behavior::pulse:
 				this->data_pending_state_ = data_pending_state::waiting_pulse;
 				break;
-			}
-			default : std::unreachable();
+			default:
+				std::unreachable();
 			}
 		}
 
 		void mark_updated(std::size_t from) noexcept override{
+			//TODO discard update when from is updating trigger type?
 			if(from != -1){
 				dirty_.set(from, true);
 			}
