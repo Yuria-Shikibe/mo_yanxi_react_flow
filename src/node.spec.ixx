@@ -454,9 +454,6 @@ namespace mo_yanxi::react_flow{
 		}
 	};
 
-	// using O = int;
-	// using I = std::string_view;
-
 	export
 	template <typename O, typename I>
 	struct relay : type_aware_node<O>{
@@ -602,6 +599,22 @@ namespace mo_yanxi::react_flow{
 		}
 	};
 
+	export
+	template <typename S>
+	struct cache final : relay<S, S>{
+	protected:
+		S operator()(const S& input) final {
+			return input;
+		}
+
+		S operator()(S&& input) final {
+			return std::move(input);
+		}
+
+		S operator()(data_package_optimal<S>&& input) final {
+			return input.fetch().value();
+		}
+	};
 
 	template <typename Fn, typename... Args>
 	consteval auto test_invoke_result(){
@@ -647,7 +660,7 @@ namespace mo_yanxi::react_flow{
 
 	template <typename RawFn, typename... Args>
 	struct transformer_unambiguous_helper<RawFn, std::tuple<Args...>>{
-		using type = transformer<RawFn, Args...>;
+		using type = transformer<RawFn, std::decay_t<Args>...>;
 	};
 
 	export
@@ -663,14 +676,21 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <typename Fn>
-	auto make_transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn){
+	[[nodiscard]] auto make_transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn){
 		return async_transformer_unambiguous<Fn>{data_propagate_type, async_type, std::forward<Fn>(fn)};
 	}
 
 	export
 	template <typename Fn>
-	auto make_transformer(propagate_behavior data_propagate_type, Fn&& fn){
+	[[nodiscard]] auto make_transformer(propagate_behavior data_propagate_type, Fn&& fn){
 		return transformer_unambiguous<Fn>{data_propagate_type, std::forward<Fn>(fn)};
-
 	}
+
+	export
+	template <typename Fn>
+	[[nodiscard]] auto make_transformer(Fn&& fn){
+		return transformer_unambiguous<Fn>{propagate_behavior::eager, std::forward<Fn>(fn)};
+	}
+
+
 }

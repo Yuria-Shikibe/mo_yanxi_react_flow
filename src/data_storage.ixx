@@ -349,7 +349,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 
-		[[nodiscard]] constexpr std::optional<T> fetch() const noexcept(std::is_nothrow_copy_constructible_v<T> &&
+		[[nodiscard]] constexpr std::optional<T> fetch() noexcept(std::is_nothrow_copy_constructible_v<T> &&
 			std::is_nothrow_move_constructible_v<T>){
 			if(is_local){
 				return std::optional<T>{std::move(u.local)};
@@ -368,7 +368,7 @@ namespace mo_yanxi::react_flow{
 			return std::nullopt;
 		}
 
-		[[nodiscard]] constexpr T fetch_unchecked() const noexcept(std::is_nothrow_copy_constructible_v<T> &&
+		[[nodiscard]] constexpr T fetch_unchecked() noexcept(std::is_nothrow_copy_constructible_v<T> &&
 			std::is_nothrow_move_constructible_v<T>){
 			if(is_local){
 				return std::move(u.local);
@@ -519,7 +519,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 
-		[[nodiscard]] std::optional<T> fetch() const noexcept(std::is_nothrow_copy_constructible_v<T> &&
+		[[nodiscard]] std::optional<T> fetch() noexcept(std::is_nothrow_copy_constructible_v<T> &&
 			std::is_nothrow_move_constructible_v<T>){
 			if constexpr(is_small_object){
 				return std::optional<T>{std::move(storage_)};

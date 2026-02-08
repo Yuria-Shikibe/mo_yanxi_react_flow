@@ -1,6 +1,7 @@
 module;
 
 #include <version>
+#define NODISCARD_ON_ADD [[nodiscard("You should save the reference to node on add")]]
 
 export module mo_yanxi.react_flow:manager;
 
@@ -159,21 +160,21 @@ namespace mo_yanxi::react_flow{
 		}
 
 		template <std::derived_from<node> T, typename... Args>
-		T& add_node(Args&&... args){
+		NODISCARD_ON_ADD T& add_node(Args&&... args){
 			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::forward<Args>(args)...));
 			this->process_node(*ptr);
 			return static_cast<T&>(*ptr);
 		}
 
 		template <std::derived_from<node> T>
-		T& add_node(T&& node){
+		NODISCARD_ON_ADD T& add_node(T&& node){
 			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::move(node)));
 			this->process_node(*ptr);
 			return static_cast<T&>(*ptr);
 		}
 
 		template <std::derived_from<node> T>
-		T& add_node(const T& node){
+		NODISCARD_ON_ADD T& add_node(const T& node){
 			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(node));
 			this->process_node(*ptr);
 			return static_cast<T&>(*ptr);

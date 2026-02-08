@@ -486,12 +486,12 @@ namespace mo_yanxi::react_flow{
 
 	template <typename RawFn, typename... Args>
 	struct async_transformer_unambiguous_helper<RawFn, std::tuple<Args...>>{
-		using type = async_transformer<RawFn, Args...>;
+		using type = async_transformer<RawFn, std::decay_t<Args>...>;
 	};
 
 	template <typename RawFn, typename... Args>
 	struct async_transformer_unambiguous_helper<RawFn, std::tuple<const async_context&, Args...>>{
-		using type = async_transformer<RawFn, Args...>;
+		using type = async_transformer<RawFn, std::decay_t<Args>...>;
 	};
 
 	export

@@ -77,7 +77,7 @@ std::string to_string(const stoa_result<T>& rst){
 }
 
 export
-template <typename Arth, typename Str>
+template <typename Arth, typename Str = std::string>
 struct string_to_arth : relay<stoa_result<Arth>, Str>{
 	using return_type = stoa_result<Arth>;
 	using from_chars_param_type = std::conditional_t<std::floating_point<Arth>, std::chars_format, int>;
@@ -147,7 +147,7 @@ template <typename Fn>
 auto make_listener(propagate_behavior data_propagate_type, Fn&& fn){
 	using FnTrait = mo_yanxi::function_traits<Fn>::mem_func_args_type;
 	static_assert(std::tuple_size_v<FnTrait> == 1);
-	return listener<std::decay_t<Fn>, std::tuple_element_t<0, FnTrait>>{data_propagate_type, std::forward<Fn>(fn)};
+	return listener<std::decay_t<Fn>, std::decay_t<std::tuple_element_t<0, FnTrait>>>{data_propagate_type, std::forward<Fn>(fn)};
 }
 
 export

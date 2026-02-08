@@ -137,10 +137,6 @@ namespace mo_yanxi::react_flow{
 	struct modifier_base;
 
 	export
-	template <typename T>
-	struct intermediate_cache;
-
-	export
 	using raw_node_ptr = node*;
 
 	export
@@ -185,9 +181,6 @@ namespace mo_yanxi::react_flow{
 
 		template <typename Ret, typename... Args>
 		friend struct modifier_base;
-
-		template <typename T>
-		friend struct intermediate_cache;
 
 	private:
 		std::size_t reference_count_{};
@@ -679,6 +672,13 @@ namespace mo_yanxi::react_flow{
 			return node_type_cast<T>(*parent).request_raw(allow_expired);
 		}
 
+		void try_fetch(){
+			if(!parent)return;
+			if(auto dat = this->nothrow_request(true)){
+				this->on_update(*dat);
+			}
+		}
+
 	protected:
 		void connect_predecessor_impl(const std::size_t slot, node& prev) final{
 			assert(slot == 0);
@@ -689,9 +689,6 @@ namespace mo_yanxi::react_flow{
 				parent->erase_successors_single_edge(idx, *this);
 			}
 			parent = std::addressof(prev);
-			if(auto dat = this->nothrow_request(true)){
-				this->on_update(*dat);
-			}
 		}
 
 		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
