@@ -7,44 +7,52 @@ env:
 on:
   push:
     branches: [ "master" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [ "master" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: ${{ matrix.os }} - ${{ matrix.toolchain }} - ${{ matrix.mode }}
     runs-on: ${{ matrix.os }}
 
+    # 2. 快速失败：任何一个 Job 挂了，立刻结束其他的，省钱
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os: [
-          windows-latest,
-          ubuntu-latest
-        ]
-        toolchain: [ msvc, clang, gcc ]
-        mode: [ debug, release ]
         include:
+          # 显式定义需要的组合，比 exclude 更清晰且不易出错
           - os: windows-latest
             toolchain: msvc
+            mode: release
+            plat: windows
+
+          # 仅在 Windows 下测试 Clang (可选，为了省钱可以去掉这个，只测 MSVC)
           - os: windows-latest
             toolchain: clang
+            mode: release
+            plat: windows
 
-          # 2. Linux: 使用 GCC/Clang
-#          - os: ubuntu-latest
-#            toolchain: gcc
+          # Linux Clang 构建
           - os: ubuntu-latest
             toolchain: clang
+            mode: release
+            plat: linux
 
-        exclude:
-          - os: ubuntu-latest
-            toolchain: msvc
-          - os: windows-latest
-            toolchain: gcc
-    #          - os: ubuntu-latest
-    #            toolchain: msvc
-          - os: ubuntu-latest
-            toolchain: gcc
-
+          # 如果为了省钱，Debug 模式可以只跑一个平台，或者完全去掉（依赖本地测试）
+          # - os: ubuntu-latest
+          #   toolchain: clang
+          #   mode: debug
+          #   plat: linux
 
     steps:
       - uses: actions/checkout@v4
@@ -54,49 +62,40 @@ jobs:
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: latest
-      #          actions-cache-folder: '.xmake-cache'
+          actions-cache-folder: '.xmake-cache' # 配合 actions/cache 使用
 
-
-      - name: Install LLVM  (Linux Clang only)
+      - name: Install LLVM
         if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'clang'
         run: |
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh ${{ env.LLVM_VER }} all
-          sudo apt-get install -y libc++-${{ env.LLVM_VER }}-dev libc++abi-${{ env.LLVM_VER }}-dev clang-tools-${{ env.LLVM_VER }} libunwind-${{ env.LLVM_VER }}-dev
-          echo "/usr/lib/llvm-${{ env.LLVM_VER }}/bin" >> $GITHUB_PATH
+          # 安装 libc++ 依赖
+          sudo apt-get install -y libc++-${{ env.LLVM_VER }}-dev libc++abi-${{ env.LLVM_VER }}-dev libunwind-${{ env.LLVM_VER }}-dev
 
-      - name: Build ${{ matrix.mode }}
+      - name: Configure
         shell: bash
         run: |
-          # 基础标志定义为数组
-          XMAKE_FLAGS=(-m ${{ matrix.mode }} --toolchain=${{ matrix.toolchain }} -yv)
-          EXTRA_FLAGS=()
-
-          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-             PLAT_FLAGS="-p linux"
-          else
-             PLAT_FLAGS="-p windows"
-          fi
-
+          # 构造配置参数
+          CONFIG_CMD="xmake f -m ${{ matrix.mode }} --toolchain=${{ matrix.toolchain }} -p ${{ matrix.plat }} -y --add_test=y"
+          
+          # Linux Clang 特殊处理
           if [[ "${{ matrix.os }}" == "ubuntu-latest" && "${{ matrix.toolchain }}" == "clang" ]]; then
-             clang --version
-             # 修改点：去掉 ldflags 值周围的单引号
-             # Bash 数组配合 "${EXTRA_FLAGS[@]}" 已经足以保证这串带有空格的参数作为一个整体传递给 xmake
-             EXTRA_FLAGS=(
-               "--sdk=/usr/lib/llvm-${{ env.LLVM_VER }}"
-               "--cxflags=-stdlib=libc++"
-               "--ldflags=-stdlib=libc++ -lc++abi -lunwind"
-             )
+             # 动态获取安装路径，避免硬编码版本号带来的路径错误
+             LLVM_PATH="/usr/lib/llvm-${{ env.LLVM_VER }}"
+             EXTRA_FLAGS="--sdk=$LLVM_PATH --cxflags=-stdlib=libc++ --ldflags='-stdlib=libc++ -lc++abi -lunwind'"
+          
+             # 只有当安装了自定义 LLVM 时才导出 PATH
+             echo "$LLVM_PATH/bin" >> $GITHUB_PATH
+          
+             CONFIG_CMD="$CONFIG_CMD $EXTRA_FLAGS"
           fi
 
-          echo "Configuring with: ${XMAKE_FLAGS[@]} $PLAT_FLAGS ${EXTRA_FLAGS[@]}"
+          echo "Running: $CONFIG_CMD"
+          eval $CONFIG_CMD
 
-          # 强制清理配置并传递数组参数
-          # 注意："${EXTRA_FLAGS[@]}" 必须加引号，这样 Bash 才会把 "--ldflags=... ... ..." 当作单独的一个参数传给 xmake
-          xmake f -c $PLAT_FLAGS "${XMAKE_FLAGS[@]}" "${EXTRA_FLAGS[@]}"
-
-          xmake -bvy ${{ env.TARGET_NAME }}
+      - name: Build
+        run: xmake -bvy ${{ env.TARGET_NAME }}
 
       - name: Test
         run: xmake run ${{ env.TARGET_NAME }}.test

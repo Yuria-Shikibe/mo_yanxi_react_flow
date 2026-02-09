@@ -30,6 +30,10 @@ Where the data flow ends.
 Accept one or multiple input and transform it into the input of successors.
 ![modifier.drawio.svg](properties/modifier.drawio.svg)
 
+The significance of having this set of conversions within the node is to facilitate caching and view passing, ensuring that subsequent operations involve zero redundant copies.
+
+**Note:** Currently, safe built-in conversions are only performed for types satisfying the `std::ranges::view` concept. Using types such as `std::reference_wrapper` as transform result may lead to **dangling references**. Future updates will aim to ensure this is prohibited at compile-time.
+
 
 # Mode Specify
 //TBD
