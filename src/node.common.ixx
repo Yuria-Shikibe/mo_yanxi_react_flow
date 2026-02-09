@@ -104,7 +104,7 @@ struct string_to_arth : relay<stoa_result<Arth>, Str>{
 	}
 
 protected:
-	return_type operator()(push_data_storage<Str>& input) override{
+	return_type operator()(data_carrier<Str>& input) override{
 		return this->operator()(input.get());
 	}
 
@@ -135,7 +135,7 @@ struct listener : terminal<Arg>{
 	}
 
 protected:
-	void on_update(push_data_storage<Arg>& data) override{
+	void on_update(data_carrier<Arg>& data) override{
 		std::invoke(fn, data);
 	}
 };
@@ -147,15 +147,15 @@ auto make_listener(propagate_type data_propagate_type, Fn&& fn){
 	using ArgTy = std::tuple_element_t<0, FnTrait>;
 	using DecayTy = std::decay_t<ArgTy>;
 	static_assert(std::tuple_size_v<FnTrait> == 1);
-	if constexpr (spec_of<DecayTy, push_data_storage>){
+	if constexpr (spec_of<DecayTy, data_carrier>){
 		return listener<std::decay_t<Fn>, typename DecayTy::value_type>{data_propagate_type, std::forward<Fn>(fn)};
 	}else if constexpr (std::is_lvalue_reference_v<ArgTy> && std::is_const_v<std::remove_reference_t<ArgTy>>){
 		//if is const reference, pass by view
-		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](push_data_storage<DecayTy>& data){
+		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](data_carrier<DecayTy>& data){
 			std::invoke(f, data.get_ref_view());
 		});
 	}else if constexpr (!std::is_lvalue_reference_v<ArgTy>){
-		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](push_data_storage<DecayTy>& data){
+		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](data_carrier<DecayTy>& data){
 			std::invoke(f, data.get());
 		});
 	}else{

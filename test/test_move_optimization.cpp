@@ -60,7 +60,7 @@ struct TestListener : terminal<MoveTracker> {
         : terminal<MoveTracker>(pb), updated(u), name(std::move(n)) {}
 
 public:
-    void on_update(push_data_storage<MoveTracker>& data) override {
+    void on_update(data_carrier<MoveTracker>& data) override {
         const auto& v = data.get_ref_view();
         // Ignore initial synchronization where value is empty
         if (v.value == "") return;

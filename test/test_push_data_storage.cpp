@@ -47,11 +47,11 @@ namespace tests {
         // --- 测试场景 A: 平凡类型 (int) ---
         {
             // 构造与 get
-            push_data_storage<int> ps(42);
+            data_carrier<int> ps(42);
             if (ps.get() != 42) return false;
 
             // 默认构造
-            push_data_storage<int> ps_def;
+            data_carrier<int> ps_def;
             if (ps_def.get() != 0) return false;
         }
 
@@ -59,13 +59,13 @@ namespace tests {
 
         // B1. 默认构造
         {
-            push_data_storage<NonTrivialObj> ps;
+            data_carrier<NonTrivialObj> ps;
             if (!ps.is_empty()) return false;
         }
 
         // B2. 移动构造 (持有值 T)
         {
-            push_data_storage<NonTrivialObj> ps(NonTrivialObj{100});
+            data_carrier<NonTrivialObj> ps(NonTrivialObj{100});
 
             if (ps.is_empty()) return false;
 
@@ -83,7 +83,7 @@ namespace tests {
         {
             NonTrivialObj source{200};
             // 这里传入左值引用，会匹配 explicit push_data_storage(const T& ptr)
-            push_data_storage<NonTrivialObj> ps(source);
+            data_carrier<NonTrivialObj> ps(source);
 
             if (ps.is_empty()) return false;
 
@@ -98,8 +98,8 @@ namespace tests {
 
         // B4. 移动赋值
         {
-            push_data_storage<NonTrivialObj> ps1(NonTrivialObj{300});
-            push_data_storage<NonTrivialObj> ps2;
+            data_carrier<NonTrivialObj> ps1(NonTrivialObj{300});
+            data_carrier<NonTrivialObj> ps2;
 
             ps2 = std::move(ps1);
 
@@ -165,7 +165,7 @@ using namespace mo_yanxi::react_flow;
 
 // 测试场景：持有值 (Value Semantics)
 TEST(PushDataStorageTest, NonTrivial_HoldsValue_Lifecycle) {
-    using StorageType = push_data_storage<std::string>;
+    using StorageType = data_carrier<std::string>;
 
     std::string data = "hello world";
 
@@ -189,7 +189,7 @@ TEST(PushDataStorageTest, NonTrivial_HoldsValue_Lifecycle) {
 
 // 测试场景：持有指针 (Pointer/Reference Semantics)
 TEST(PushDataStorageTest, NonTrivial_HoldsPointer_Lifecycle) {
-    using StorageType = push_data_storage<std::string>;
+    using StorageType = data_carrier<std::string>;
 
     std::string origin = "persistent data";
 
@@ -211,7 +211,7 @@ TEST(PushDataStorageTest, NonTrivial_HoldsPointer_Lifecycle) {
 
 // 测试场景：异常处理
 TEST(PushDataStorageTest, NonTrivial_ExceptionSafety) {
-    push_data_storage<std::string> empty_storage;
+    data_carrier<std::string> empty_storage;
 
     ASSERT_TRUE(empty_storage.is_empty());
 
@@ -228,7 +228,7 @@ TEST(PushDataStorageTest, NonTrivial_ExceptionSafety) {
 
 // 测试场景：Storage 自身的移动语义
 TEST(PushDataStorageTest, NonTrivial_StorageMoveSemantics) {
-    using StorageType = push_data_storage<std::string>;
+    using StorageType = data_carrier<std::string>;
 
     StorageType src(std::string("payload"));
     ASSERT_FALSE(src.is_empty());
@@ -257,7 +257,7 @@ TEST(PushDataStorageTest, NonTrivial_VerifyInternalMove) {
     {
         LifecycleTracker t(100);
         // 构造 storage，T&&，发生一次移动
-        push_data_storage<LifecycleTracker> storage(std::move(t));
+        data_carrier<LifecycleTracker> storage(std::move(t));
 
         // 此时 storage 内部持有一个 LifecycleTracker
 
@@ -285,7 +285,7 @@ TEST(PushDataStorageTest, TrivialType_Int) {
     // 平凡版本没有 is_empty() 方法，如果调用 is_empty 会编译失败
     // 我们可以利用 SFINAE 检查，或者直接测试其行为
 
-    push_data_storage<int> ps(42);
+    data_carrier<int> ps(42);
 
     // 测试 get
     EXPECT_EQ(ps.get(), 42);
@@ -301,7 +301,7 @@ TEST(PushDataStorageTest, TrivialType_Struct) {
     struct Point { int x, y; }; // 平凡类型
     static_assert(std::is_trivially_copyable_v<Point>);
 
-    push_data_storage<Point> ps(Point{10, 20});
+    data_carrier<Point> ps(Point{10, 20});
 
     Point p = ps.get();
     EXPECT_EQ(p.x, 10);

@@ -55,9 +55,8 @@ void simple_io_async_example(){
 	}));
 
 	auto& path_reader = manager.add_node<file_reader>();
-	auto& path_read_cache = manager.add_node<cache<std::string>>();
 
-	auto& formatter = manager.add_node(make_transformer([](const std::string& str, int val){
+	auto& formatter = manager.add_node(make_transformer<descriptor<std::string, {true}, std::string_view>, descriptor<int, {.quiet = true}>>([](std::string_view str, int val){
 		return std::format("{} -- {}", str, val);
 	}));
 
@@ -74,14 +73,14 @@ void simple_io_async_example(){
 	}));
 
 	connect_chain({&num_input, &stoi_trans, &int_trans, &formatter});
-	connect_chain({&path_input, &path_reader, &path_read_cache, &formatter});
+	connect_chain({&path_input, &path_reader, &formatter});
 	connect_chain({&formatter, &final_printer});
 	path_reader.add_progress_receiver(progress_listener);
 
 	/*
-	 * num_input -> stoi_trans -> int_trans ---------->|
-	 *                                                 |
-	 * path_input -> path_reader -> path_read_cache -> formatter -> final_printer
+	 * num_input -> stoi_trans -> int_trans ->|
+	 *                                        |
+	 * path_input -> path_reader -----------> formatter -> final_printer
 	 *               |
 	 *               (builtin progress provider) -> progress_listener
 	 */
@@ -104,7 +103,7 @@ void simple_io_async_example(){
 
 
 int main(){
-	modifier_test();
+	// modifier_test();
 
-	// simple_io_async_example();
+	simple_io_async_example();
 }

@@ -16,7 +16,7 @@ void modifier_test(){
 
 	auto& num_input = manager.add_node<provider_general<std::string>>();
 
-	auto& stoi = manager.add_node(make_transformer_v2<descriptor<std::string, {true}, std::string_view>>([](std::string_view input) -> std::optional<int> {
+	auto& stoi = manager.add_node(make_transformer<descriptor<std::string, {true}, std::string_view>>([](std::string_view input) -> std::optional<int> {
 		int v;
 		if(const auto [ptr, ec] = std::from_chars(input.data(), input.data() + input.size(), v); ec == std::errc{}){
 			return v;
@@ -25,7 +25,7 @@ void modifier_test(){
 		return std::nullopt;
 	}));
 
-	auto& mul2 = manager.add_node(make_transformer_v2([](std::optional<int>&& input) -> std::optional<int> {
+	auto& mul2 = manager.add_node(make_transformer([](std::optional<int>&& input) -> std::optional<int> {
 		return input.transform([](int val){return val * 2;});
 	}));
 

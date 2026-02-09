@@ -156,16 +156,16 @@ namespace mo_yanxi::react_flow{
 		}
 
 		template <typename T>
-		void update(push_data_storage<T>&& data) const;
+		void update(data_carrier<T>&& data) const;
 
-		void update(push_data_obj&& data, data_type_index checker) const;
+		void update(data_carrier_obj&& data, data_type_index checker) const;
 
 		void mark_updated() const;
 	};
 
 	template <typename Rng, typename T>
-	void push_to_successors(Rng&& range, push_data_storage<T>&& data){
-		if constexpr (push_data_storage<T>::is_trivial){
+	void push_to_successors(Rng&& range, data_carrier<T>&& data){
+		if constexpr (data_carrier<T>::is_trivial){
 			for(const successor_entry& e : range){
 				e.update(std::move(data));
 			}
@@ -177,7 +177,7 @@ namespace mo_yanxi::react_flow{
 				const successor_entry& e = *std::ranges::begin(range);
 				e.update(std::move(data));
 			}else{
-				push_data_storage<T> cropped{std::as_const(data)};
+				data_carrier<T> cropped{std::as_const(data)};
 				auto cur = std::ranges::begin(range);
 				const auto last = std::ranges::prev(std::ranges::end(range));
 
@@ -441,7 +441,7 @@ namespace mo_yanxi::react_flow{
 		 *
 		 * @param in_data ptr to const data, provided by parent
 		 */
-		virtual void on_push(std::size_t target_index, push_data_obj&& in_data){
+		virtual void on_push(std::size_t target_index, data_carrier_obj&& in_data){
 		}
 
 		/**
@@ -600,18 +600,18 @@ namespace mo_yanxi::react_flow{
 
 
 		void update_value(T&& value){
-			this->on_push(0, push_data_storage{std::move(value)});
+			this->on_push(0, data_carrier{std::move(value)});
 		}
 
 		void update_value(const T& value){
-			this->on_push(0, push_data_storage{value});
+			this->on_push(0, data_carrier{value});
 		}
 
-		void update_value(push_data_storage<T>& data){
+		void update_value(data_carrier<T>& data){
 			this->on_push(0, data);
 		}
 
-		void update_value(push_data_storage<T>&& data){
+		void update_value(data_carrier<T>&& data){
 			this->on_push(0, data);
 		}
 
@@ -651,7 +651,7 @@ namespace mo_yanxi::react_flow{
 	protected:
 		std::vector<successor_entry> successors{};
 
-		void on_push(std::size_t target_index, push_data_obj&& in_data) override{
+		void on_push(std::size_t target_index, data_carrier_obj&& in_data) override{
 			assert(target_index == 0);
 			react_flow::push_to_successors(successors, push_data_cast<T>(std::move(in_data)));
 		}
@@ -735,11 +735,11 @@ namespace mo_yanxi::react_flow{
 		}
 
 
-		virtual void on_update(push_data_storage<T>& data){
+		virtual void on_update(data_carrier<T>& data){
 		}
 
 
-		void on_update(push_data_storage<T>&& data){
+		void on_update(data_carrier<T>&& data){
 			this->on_update(data);
 		}
 
@@ -750,7 +750,7 @@ namespace mo_yanxi::react_flow{
 
 		friend terminal_cached<T>;
 
-		void on_push(const std::size_t from_index, push_data_obj&& in_data) override{
+		void on_push(const std::size_t from_index, data_carrier_obj&& in_data) override{
 			assert(from_index == 0);
 			this->data_pending_state_ = data_pending_state::done;
 			auto& storage = push_data_cast<T>(in_data);
@@ -792,11 +792,11 @@ namespace mo_yanxi::react_flow{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
 			this->data_pending_state_ = data_pending_state::done;
 
-			push_data_storage d{cache_};
+			data_carrier d{cache_};
 			this->on_update(d);
 		}
 
-		void on_push(const std::size_t from_index, push_data_obj&& in_data) override{
+		void on_push(const std::size_t from_index, data_carrier_obj&& in_data) override{
 			switch(this->data_propagate_type_){
 			case propagate_type::eager : this->data_pending_state_ = data_pending_state::done;
 				{
@@ -804,7 +804,7 @@ namespace mo_yanxi::react_flow{
 					cache_ = storage.get();
 
 
-					push_data_storage d{cache_};
+					data_carrier d{cache_};
 					this->on_update(d);
 				}
 
@@ -829,7 +829,7 @@ namespace mo_yanxi::react_flow{
 				if(auto rst = this->terminal<T>::request_raw(false)){
 					this->data_pending_state_ = data_pending_state::done;
 					cache_ = rst.value().get();
-					this->on_update(push_data_storage{cache_});
+					this->on_update(data_carrier{cache_});
 				}
 			}
 		}
@@ -848,12 +848,12 @@ namespace mo_yanxi::react_flow{
 	}
 
 	template <typename T>
-	void successor_entry::update(push_data_storage<T>&& data) const{
+	void successor_entry::update(data_carrier<T>&& data) const{
 		assert(unstable_type_identity_of<T>() == entity->get_in_socket_type_index()[index]);
 		entity->on_push(index, std::move(data));
 	}
 
-	void successor_entry::update(push_data_obj&& data, data_type_index checker) const{
+	void successor_entry::update(data_carrier_obj&& data, data_type_index checker) const{
 #if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
 		if(entity->get_in_socket_type_index()[index] != checker){
 			throw invalid_node_error{"Type Mismatch on update"};

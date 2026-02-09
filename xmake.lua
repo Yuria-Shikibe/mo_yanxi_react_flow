@@ -11,7 +11,10 @@ option("add_test")
 option_end()
 
 option("use_libcxx")
-    set_default(true)
+    add_deps("toolchain")
+    on_check(function (option)
+        option:enable(get_config("toolchain") == "clang" and not is_plat("windows"))
+    end)
     set_description("Use libc++")
 option_end()
 
@@ -49,7 +52,7 @@ if has_config("add_test") then
     add_requires("gtest")
 end
 
-if (not get_config("toolchain") == "msvc") and has_config("use_libcxx") then
+if (get_config("toolchain") ~= "msvc") and has_config("use_libcxx") then
     add_requireconfs("*", {configs = {cxflags = "-stdlib=libc++", ldflags = {"-stdlib=libc++", "-lc++abi", "-lunwind"}}})
     add_cxflags("-stdlib=libc++")
     add_ldflags("-stdlib=libc++", "-lc++abi", "-lunwind")

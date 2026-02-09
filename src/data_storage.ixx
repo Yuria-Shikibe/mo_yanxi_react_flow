@@ -321,11 +321,11 @@ namespace mo_yanxi::react_flow{
 
 namespace mo_yanxi::react_flow{
 	export
-	struct push_data_obj;
+	struct data_carrier_obj;
 
 	export
 	template <typename T>
-	class push_data_storage;
+	class data_carrier;
 
 	// -----------------------------------------------------------------------------
 	// 特化版本 1: 当 T 不是平凡可复制类型 (Non-Trivially Copyable)
@@ -333,7 +333,7 @@ namespace mo_yanxi::react_flow{
 	// -----------------------------------------------------------------------------
 	template <typename T>
 		requires (!std::is_trivially_copyable_v<T>)
-	class push_data_storage<T>{
+	class data_carrier<T>{
 	private:
 		using variant_t = std::variant<std::monostate, const T*, T>;
 	public:
@@ -341,25 +341,25 @@ namespace mo_yanxi::react_flow{
 		static constexpr bool is_trivial = false;
 
 		// 构造函数：默认初始化 (monostate)
-		constexpr push_data_storage() = default;
+		constexpr data_carrier() = default;
 
 		// 构造函数：直接移动传入 T
-		constexpr explicit(false) push_data_storage(T&& val) : storage_(std::move(val)){
+		constexpr explicit(false) data_carrier(T&& val) : storage_(std::move(val)){
 		}
 
 		// 构造函数：传入 const T*
-		constexpr explicit(false) push_data_storage(const T& ptr) : storage_(&ptr){
+		constexpr explicit(false) data_carrier(const T& ptr) : storage_(&ptr){
 		}
 
 		// 移动构造和赋值
-		constexpr push_data_storage(push_data_storage&& other) noexcept(std::is_nothrow_move_constructible_v<T>) requires(std::is_move_constructible_v<T>) : storage_(std::exchange(other.storage_, std::monostate{})){}
-		constexpr push_data_storage& operator=(push_data_storage&& other) noexcept(std::is_nothrow_move_assignable_v<T>) requires(std::is_move_assignable_v<T>){
+		constexpr data_carrier(data_carrier&& other) noexcept(std::is_nothrow_move_constructible_v<T>) requires(std::is_move_constructible_v<T>) : storage_(std::exchange(other.storage_, std::monostate{})){}
+		constexpr data_carrier& operator=(data_carrier&& other) noexcept(std::is_nothrow_move_assignable_v<T>) requires(std::is_move_assignable_v<T>){
 			storage_ = std::exchange(other.storage_, std::monostate{});
 			return *this;
 		}
 
-		constexpr push_data_storage(const push_data_storage&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
-		constexpr push_data_storage& operator=(const push_data_storage&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
+		constexpr data_carrier(const data_carrier&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
+		constexpr data_carrier& operator=(const data_carrier&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
 
 
 		constexpr const T* get_view() const noexcept{
@@ -424,12 +424,12 @@ namespace mo_yanxi::react_flow{
 			return !is_empty();
 		}
 
-		explicit(false) constexpr operator push_data_obj&() noexcept {
-			return reinterpret_cast<push_data_obj&>(*this);
+		explicit(false) constexpr operator data_carrier_obj&() noexcept {
+			return reinterpret_cast<data_carrier_obj&>(*this);
 		}
 
-		explicit(false) constexpr operator push_data_obj&&() &&noexcept {
-			return reinterpret_cast<push_data_obj&&>(*this);
+		explicit(false) constexpr operator data_carrier_obj&&() &&noexcept {
+			return reinterpret_cast<data_carrier_obj&&>(*this);
 		}
 
 		constexpr bool tobe_moved() const noexcept{
@@ -446,21 +446,21 @@ namespace mo_yanxi::react_flow{
 	// -----------------------------------------------------------------------------
 	template <typename T>
 		requires std::is_trivially_copyable_v<T> && std::is_object_v<T>
-	class push_data_storage<T>{
+	class data_carrier<T>{
 	public:
 		using value_type = T;
 		static constexpr bool is_trivial = true;
 		// 构造函数：值初始化
-		constexpr push_data_storage() : value_{}{
+		constexpr data_carrier() : value_{}{
 		}
 
-		constexpr explicit(false) push_data_storage(const T& val) : value_(val){
+		constexpr explicit(false) data_carrier(const T& val) : value_(val){
 		}
 
-		constexpr push_data_storage(const push_data_storage&) = default;
-		constexpr push_data_storage& operator=(const push_data_storage&) = default;
-		constexpr push_data_storage(push_data_storage&&) = default;
-		constexpr push_data_storage& operator=(push_data_storage&&) = default;
+		constexpr data_carrier(const data_carrier&) = default;
+		constexpr data_carrier& operator=(const data_carrier&) = default;
+		constexpr data_carrier(data_carrier&&) = default;
+		constexpr data_carrier& operator=(data_carrier&&) = default;
 
 		constexpr const T* get_view() const noexcept{
 			return std::addressof(value_);
@@ -478,12 +478,12 @@ namespace mo_yanxi::react_flow{
 			return value_;
 		}
 
-		explicit(false) constexpr operator push_data_obj&() noexcept {
-			return reinterpret_cast<push_data_obj&>(*this);
+		explicit(false) constexpr operator data_carrier_obj&() noexcept {
+			return reinterpret_cast<data_carrier_obj&>(*this);
 		}
 
-		explicit(false) constexpr operator push_data_obj&&() && noexcept {
-			return reinterpret_cast<push_data_obj&&>(*this);
+		explicit(false) constexpr operator data_carrier_obj&&() && noexcept {
+			return reinterpret_cast<data_carrier_obj&&>(*this);
 		}
 
 		constexpr bool tobe_moved() const noexcept{
@@ -505,62 +505,62 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename T>
 	using data_pass_t =
-		std::conditional_t<push_data_storage<T>::is_trivial,
-			std::conditional_t<(sizeof(T) > sizeof(void*) * 2), const T&, T>, push_data_storage<T>&>;
+		std::conditional_t<data_carrier<T>::is_trivial,
+			std::conditional_t<(sizeof(T) > sizeof(void*) * 2), const T&, T>, data_carrier<T>&>;
 
 	export
 	template <typename T>
-		requires (push_data_storage<T>::is_trivial && sizeof(T) <= sizeof(void*) * 2)
-	constexpr data_pass_t<T> pass_data(push_data_storage<T>& input) noexcept {
+		requires (data_carrier<T>::is_trivial && sizeof(T) <= sizeof(void*) * 2)
+	constexpr data_pass_t<T> pass_data(data_carrier<T>& input) noexcept {
 		return input.get();
 	}
 
 	export
 	template <typename T>
-		requires (push_data_storage<T>::is_trivial && sizeof(T) > sizeof(void*) * 2)
-	constexpr data_pass_t<T> pass_data(push_data_storage<T>& input) noexcept {
+		requires (data_carrier<T>::is_trivial && sizeof(T) > sizeof(void*) * 2)
+	constexpr data_pass_t<T> pass_data(data_carrier<T>& input) noexcept {
 		return input.get();
 	}
 
 	export
 	template <typename T>
-		requires (!push_data_storage<T>::is_trivial)
-	constexpr data_pass_t<T> pass_data(push_data_storage<T>& input) noexcept {
+		requires (!data_carrier<T>::is_trivial)
+	constexpr data_pass_t<T> pass_data(data_carrier<T>& input) noexcept {
 		return input;
 	}
 
 	export
 	template <typename T>
 		requires (std::is_trivially_copyable_v<T> && std::is_object_v<T>)
-	push_data_storage(const T&) -> push_data_storage<T>;
+	data_carrier(const T&) -> data_carrier<T>;
 
 	export
 	template <typename T>
 	requires (!std::is_trivially_copyable_v<std::remove_cvref_t<T>>)
-	push_data_storage(T&&) -> push_data_storage<std::remove_cvref_t<T>>;
+	data_carrier(T&&) -> data_carrier<std::remove_cvref_t<T>>;
 
 	export
 	template <typename T>
-	push_data_storage<T>& push_data_cast(push_data_obj& obj) noexcept{
-		return reinterpret_cast<push_data_storage<T>&>(obj);
+	data_carrier<T>& push_data_cast(data_carrier_obj& obj) noexcept{
+		return reinterpret_cast<data_carrier<T>&>(obj);
 	}
 
 	export
 	template <typename T>
-	const push_data_storage<T>& push_data_cast(const push_data_obj& obj) noexcept{
-		return reinterpret_cast<const push_data_storage<T>&>(obj);
+	const data_carrier<T>& push_data_cast(const data_carrier_obj& obj) noexcept{
+		return reinterpret_cast<const data_carrier<T>&>(obj);
 	}
 
 	export
 	template <typename T>
-	push_data_storage<T>&& push_data_cast(push_data_obj&& obj) noexcept{
-		return reinterpret_cast<push_data_storage<T>&&>(obj);
+	data_carrier<T>&& push_data_cast(data_carrier_obj&& obj) noexcept{
+		return reinterpret_cast<data_carrier<T>&&>(obj);
 	}
 
 	export
 	template <typename T>
-	const push_data_storage<T>&& push_data_cast(const push_data_obj&& obj) noexcept{
-		return reinterpret_cast<const push_data_storage<T>&&>(obj);
+	const data_carrier<T>&& push_data_cast(const data_carrier_obj&& obj) noexcept{
+		return reinterpret_cast<const data_carrier<T>&&>(obj);
 	}
 
 
@@ -568,7 +568,7 @@ namespace mo_yanxi::react_flow{
 	//TODO return both data and state
 	export
 	template <typename T>
-	using request_pass_handle = request_result<push_data_storage<T>>;
+	using request_pass_handle = request_result<data_carrier<T>>;
 
 	export
 	template <typename T>
@@ -590,7 +590,7 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <typename T>
-	[[nodiscard]] request_pass_handle<T> make_request_handle_expected_from_data_storage(push_data_storage<T>&& data, bool isExpired) noexcept{
+	[[nodiscard]] request_pass_handle<T> make_request_handle_expected_from_data_storage(data_carrier<T>&& data, bool isExpired) noexcept{
 		return request_pass_handle<T>(isExpired, std::move(data));
 	}
 
@@ -662,23 +662,23 @@ namespace mo_yanxi::react_flow{
 		requires (std::convertible_to<S, D>)
 	struct convertor{
 
-		FORCE_INLINE static D operator()(push_data_storage<S>& input) requires (!std::ranges::view<D> && !std::same_as<S, D>){
+		FORCE_INLINE static D operator()(data_carrier<S>&& input) requires (!std::ranges::view<D> && !std::same_as<S, D>){
 			return input.get();
 		}
 
-		FORCE_INLINE static D operator()(push_data_storage<S>& input) requires (std::ranges::view<D> && !std::same_as<S, D>){
+		FORCE_INLINE static D operator()(data_carrier<S>&& input) requires (std::ranges::view<D> && !std::same_as<S, D>){
 			return input.get_ref_view();
 		}
 
-		FORCE_INLINE static push_data_storage<D>&& operator()(push_data_storage<S>&& input) noexcept requires (std::same_as<S, D>){
+		FORCE_INLINE static data_carrier<D>&& operator()(data_carrier<S>&& input) noexcept requires (std::same_as<S, D>){
 			return std::move(input);
 		}
 	};
 
 	export
 	template <typename InputType, descriptor_tag Tag = {}, typename OutputType = InputType, typename ConvertorTy = convertor<InputType, OutputType>>
-		requires requires(push_data_storage<InputType>&& input, const ConvertorTy& transformer){
-			{ std::invoke(transformer, std::move(input)) } -> std::convertible_to<push_data_storage<OutputType>>;
+		requires requires(data_carrier<InputType>&& input, const ConvertorTy& transformer){
+			{ std::invoke(transformer, std::move(input)) } -> std::convertible_to<data_carrier<OutputType>>;
 		}
 	struct EMPTY_BASE descriptor{
 		using input_type = InputType;
@@ -688,7 +688,7 @@ namespace mo_yanxi::react_flow{
 
 		//TODO check std::ref/const_ref?
 		static_assert(!(std::ranges::view<OutputType> && !tag.cache), "view from input must have it cached, or it will casue dangling");
-		static_assert(std::convertible_to<std::invoke_result_t<convertor_type, push_data_storage<input_type>&&>, push_data_storage<output_type>>);
+		static_assert(std::convertible_to<std::invoke_result_t<convertor_type, data_carrier<input_type>&&>, data_carrier<output_type>>);
 		static_assert(std::is_object_v<InputType>);
 
 	private:
@@ -704,17 +704,16 @@ namespace mo_yanxi::react_flow{
 			return transformer;
 		}
 
-		FORCE_INLINE constexpr push_data_storage<output_type> get() const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, const input_type&>) requires(tag.cache){
-			push_data_storage data{*value}; //make l value
-			return std::invoke(transformer, data);
+		FORCE_INLINE constexpr data_carrier<output_type> get() const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, const input_type&>) requires(tag.cache){
+			return std::invoke(transformer, data_carrier{*value});
 		}
 
-		FORCE_INLINE constexpr push_data_storage<output_type> get(push_data_storage<input_type>& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
-			return std::invoke(transformer, pushed);
-		}
+		// FORCE_INLINE constexpr data_carrier<output_type> get(data_carrier<input_type>& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
+		// 	return std::invoke(transformer, pushed);
+		// }
 
 
-		FORCE_INLINE constexpr push_data_storage<output_type> get(push_data_storage<input_type>&& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
+		FORCE_INLINE constexpr data_carrier<output_type> get(data_carrier<input_type>&& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
 			return std::invoke(transformer, std::move(pushed));
 		}
 
@@ -724,7 +723,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 
-		constexpr push_data_storage<output_type> operator<<(push_data_storage<input_type>&& pushed){
+		constexpr data_carrier<output_type> operator<<(data_carrier<input_type>&& pushed){
 			if constexpr (tag.cache){
 				*value = pushed.get();
 				return this->get();
@@ -733,11 +732,11 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
-		constexpr void set(push_data_storage<input_type>& pushed) requires(tag.cache){
+		constexpr void set(data_carrier<input_type>& pushed) requires(tag.cache){
 			*value = pushed.get();
 		}
 
-		constexpr void set(push_data_storage<input_type>&& pushed) requires(tag.cache){
+		constexpr void set(data_carrier<input_type>&& pushed) requires(tag.cache){
 			this->set(pushed);
 		}
 
@@ -768,8 +767,8 @@ namespace mo_yanxi::react_flow{
 		using output_type = T::output_type;
 		using convertor_type = T::convertor_type;
 
-		using input_pass_type = push_data_storage<input_type>;
-		using output_pass_type = push_data_storage<output_type>;
+		using input_pass_type = data_carrier<input_type>;
+		using output_pass_type = data_carrier<output_type>;
 
 		using operator_pass_type = data_pass_t<output_type>;
 		static constexpr descriptor_tag tag = T::tag;

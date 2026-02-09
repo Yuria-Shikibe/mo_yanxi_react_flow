@@ -55,7 +55,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 	protected:
-		void on_push(std::size_t, push_data_obj&& in_data) override{
+		void on_push(std::size_t, data_carrier_obj&& in_data) override{
 			auto& storage = push_data_cast<T>(in_data);
 			data_ = storage.get();
 			on_update();
@@ -64,17 +64,17 @@ namespace mo_yanxi::react_flow{
 		void on_pulse_received(manager& m) override{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
 			this->data_pending_state_ = data_pending_state::done;
-			react_flow::push_to_successors(this->successors, push_data_storage{data_});
+			react_flow::push_to_successors(this->successors, data_carrier{data_});
 		}
 
 	private:
 		void on_update(){
 			switch(this->data_propagate_type_){
 			case propagate_type::eager : this->data_pending_state_ = data_pending_state::done;
-				react_flow::push_to_successors(this->successors, push_data_storage{data_});
+				react_flow::push_to_successors(this->successors, data_carrier{data_});
 				break;
 			case propagate_type::lazy : this->data_pending_state_ = data_pending_state::done;
-				std::ranges::for_each(this->successors, &successor_entry::mark_updated);
+				node::mark_updated(-1);
 				break;
 			case propagate_type::pulse : this->data_pending_state_ = data_pending_state::waiting_pulse;
 				break;
@@ -142,11 +142,11 @@ namespace mo_yanxi::react_flow{
 			return this->operator()(input);
 		}
 
-		virtual O operator()(push_data_storage<I>& input){
+		virtual O operator()(data_carrier<I>& input){
 			return this->operator()(input.get());
 		}
 
-		void on_push(std::size_t from_index, push_data_obj&& in_data) final{
+		void on_push(std::size_t from_index, data_carrier_obj&& in_data) final{
 			assert(from_index == 0);
 			auto& storage = push_data_cast<I>(in_data);
 			this->cache = this->operator()(storage.get());
@@ -154,13 +154,12 @@ namespace mo_yanxi::react_flow{
 			switch(this->get_propagate_type()){
 			case propagate_type::eager :{
 				this->data_pending_state_ = data_pending_state::done;
-				push_data_storage<O> data(this->cache);
-				this->push_update(data, this->get_out_socket_type_index());
+				react_flow::push_to_successors(successors, data_carrier{cache});
 				break;
 			}
 			case propagate_type::lazy :{
 				this->data_pending_state_ = data_pending_state::done;
-				std::ranges::for_each(this->get_outputs(), &successor_entry::mark_updated);
+				node::mark_updated(-1);
 				break;
 			}
 			case propagate_type::pulse :{
@@ -175,8 +174,7 @@ namespace mo_yanxi::react_flow{
 		void on_pulse_received(manager& m) final{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
 			this->data_pending_state_ = data_pending_state::done;
-			push_data_storage<O> data(cache);
-			this->push_update(data, this->get_out_socket_type_index());
+			react_flow::push_to_successors(successors, data_carrier{cache});
 		}
 
 		void disconnect_self_from_context() noexcept final{
@@ -242,7 +240,7 @@ namespace mo_yanxi::react_flow{
 			return std::move(input);
 		}
 
-		S operator()(push_data_storage<S>& input) final {
+		S operator()(data_carrier<S>& input) final {
 			return input.get();
 		}
 	};

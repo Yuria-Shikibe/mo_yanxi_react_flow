@@ -49,15 +49,4 @@ namespace mo_yanxi::react_flow{
 		return async_transformer_unambiguous<Fn>{data_propagate_type, async_type::async_latest, std::forward<Fn>(fn)};
 	}
 
-	export
-	template <typename Fn>
-	[[nodiscard]] auto make_transformer(propagate_type data_propagate_type, Fn&& fn){
-		return react_flow::make_transformer_v2(data_propagate_type, std::forward<Fn>(fn));
-	}
-
-	export
-	template <typename Fn>
-	[[nodiscard]] auto make_transformer(Fn&& fn){
-		return react_flow::make_transformer(propagate_type::eager, std::forward<Fn>(fn));
-	}
 }

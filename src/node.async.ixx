@@ -176,7 +176,7 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 
-		void on_push(std::size_t slot, push_data_obj&& in_data) override{
+		void on_push(std::size_t slot, data_carrier_obj&& in_data) override{
 			assert(slot < arg_count);
 
 			update_data(slot, in_data);
@@ -274,7 +274,7 @@ namespace mo_yanxi::react_flow{
 		// --- 内部连接辅助 ---
 
 		void async_done(Ret&& val) const{
-			react_flow::push_to_successors(successors_, push_data_storage{std::move(val)});
+			react_flow::push_to_successors(successors_, data_carrier{std::move(val)});
 		}
 
 		bool connect_successors_impl(std::size_t slot, node& post) final{
@@ -331,7 +331,7 @@ namespace mo_yanxi::react_flow{
 			return any_expired;
 		}
 
-		void update_data(std::size_t slot, push_data_obj& in_data){
+		void update_data(std::size_t slot, data_carrier_obj& in_data){
 			dirty_.set(slot, false);
 
 			[&, this]<std::size_t ... Idx>(std::index_sequence<Idx...>){
