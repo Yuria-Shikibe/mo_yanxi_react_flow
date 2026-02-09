@@ -5,7 +5,7 @@ module;
 export module mo_yanxi.react_flow;
 
 export import :node_interface;
-export import :nodes;
+export import :endpoint;
 export import :async;
 export import :modifier;
 

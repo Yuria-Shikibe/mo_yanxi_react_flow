@@ -77,7 +77,7 @@ std::string to_string(const stoa_result<T>& rst){
 
 export
 template <typename Arth, typename Str = std::string>
-struct string_to_arth : relay<stoa_result<Arth>, Str>{
+struct string_to_arth : modifier<descriptor<stoa_result<Arth>, {true}>, descriptor<Str>>{
 	using return_type = stoa_result<Arth>;
 	using from_chars_param_type = std::conditional_t<std::floating_point<Arth>, std::chars_format, int>;
 
@@ -89,7 +89,7 @@ struct string_to_arth : relay<stoa_result<Arth>, Str>{
 		}
 	}();
 
-	using relay<stoa_result<Arth>, Str>::relay;
+	using modifier<descriptor<stoa_result<Arth>, {true}>, descriptor<Str>>::modifier;
 
 	[[nodiscard]] explicit string_to_arth(
 		from_chars_param_type from_chars_argument)
@@ -99,23 +99,14 @@ struct string_to_arth : relay<stoa_result<Arth>, Str>{
 	[[nodiscard]] string_to_arth(
 		propagate_type data_propagate_type,
 		from_chars_param_type from_chars_argument)
-	: relay<std::expected<Arth, stoa_err>, Str>(data_propagate_type),
-	from_chars_argument(from_chars_argument){
+		: modifier<descriptor<stoa_result<Arth>, {true}>, descriptor<Str>>(data_propagate_type),
+		from_chars_argument(from_chars_argument){
 	}
 
 protected:
-	return_type operator()(data_carrier<Str>& input) override{
-		return this->operator()(input.get());
+	data_carrier<stoa_result<Arth>> operator()(data_pass_t<Str> args) override{
+		return react_flow::stoa<Arth>(args.get_ref_view(), from_chars_argument);
 	}
-
-	return_type operator()(const Str& input) override{
-		return react_flow::stoa<Arth>(input, from_chars_argument);
-	}
-
-	return_type operator()(Str&& input) override{
-		return react_flow::stoa<Arth>(input, from_chars_argument);
-	}
-
 };
 
 export

@@ -487,7 +487,7 @@ namespace mo_yanxi::react_flow{
 
 			};
 			return [&]<std::size_t ...Idx>(std::index_sequence<Idx...>){
-				return [f = std::forward<Fn>(fn)](std::tuple_element_t<Idx, Expected> ...args){
+				return [f = std::forward<Fn>(fn)] FORCE_INLINE (std::tuple_element_t<Idx, Expected> ...args){
 					return std::invoke(f, adaptor.template operator()<std::tuple_element_t<Idx, CurrentTy>>(args)...);
 				};
 			}(std::make_index_sequence<std::tuple_size_v<CurrentTy>>{});
@@ -497,7 +497,7 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename ...Args, typename Fn>
 		requires (sizeof...(Args) > 0)
-	[[nodiscard]] auto make_transformer(propagate_type data_propagate_type, Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_transformer(propagate_type data_propagate_type, Fn&& fn){
 		auto adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
 		using return_type = std::invoke_result_t<decltype(adapted), typename descriptor_trait<make_descriptor_t<Args>>::operator_pass_type ...>;
 		return transformer_v2<descriptor<return_type>, decltype(adapted), make_descriptor_t<Args>...>{data_propagate_type, std::move(adapted)};
@@ -506,13 +506,13 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename ...Args, typename Fn>
 		requires (sizeof...(Args) > 0)
-	[[nodiscard]] auto make_transformer(Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_transformer(Fn&& fn){
 		return react_flow::make_transformer<Args...>(propagate_type::eager, std::forward<Fn&&>(fn));
 	}
 
 	export
 	template <typename ...Args, typename Ret, typename Fn>
-	[[nodiscard]] auto make_transformer(propagate_type data_propagate_type, std::in_place_type_t<Ret>, Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_transformer(propagate_type data_propagate_type, std::in_place_type_t<Ret>, Fn&& fn){
 		auto adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
 
 		if constexpr (spec_of_descriptor<Ret>){
@@ -524,7 +524,7 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <typename ...Args, typename Ret, typename Fn>
-	[[nodiscard]] auto make_transformer(std::in_place_type_t<Ret>, Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_transformer(std::in_place_type_t<Ret>, Fn&& fn){
 		return react_flow::make_transformer<Args...>(propagate_type::eager, std::in_place_type_t<Ret>{}, std::forward<Fn&&>(fn));
 	}
 
@@ -546,14 +546,14 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <typename Fn>
-	[[nodiscard]] auto make_transformer(propagate_type data_propagate_type, Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_transformer(propagate_type data_propagate_type, Fn&& fn){
 		auto adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
 		return transformer_v2_unambiguous<decltype(adapted)>(data_propagate_type, react_flow::adapt_fn_(std::move(adapted)));
 	}
 
 	export
 	template <typename Fn>
-	[[nodiscard]] auto make_transformer(Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_transformer(Fn&& fn){
 		return react_flow::make_transformer(propagate_type::eager, std::forward<Fn&&>(fn));
 	}
 }

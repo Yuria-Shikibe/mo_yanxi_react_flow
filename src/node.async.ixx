@@ -7,6 +7,7 @@ export module mo_yanxi.react_flow:async;
 
 import :manager;
 import :node_interface;
+import :endpoint;
 import mo_yanxi.type_register;
 import mo_yanxi.meta_programming;
 import std;
