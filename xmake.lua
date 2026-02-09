@@ -110,6 +110,7 @@ target("mo_yanxi.react_flow.example")
 
     add_deps("mo_yanxi.react_flow", {public = true})
     add_files("examples/**.cpp")
+    add_files("examples/**.ixx")
     set_default(false)
 target_end()
 

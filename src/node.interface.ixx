@@ -156,13 +156,50 @@ namespace mo_yanxi::react_flow{
 		}
 
 		template <typename T>
-		void update(push_data_storage<T>& data) const;
+		void update(push_data_storage<T>&& data) const;
 
-		void update(push_data_obj& data, data_type_index checker) const;
+		void update(push_data_obj&& data, data_type_index checker) const;
 
 		void mark_updated() const;
 	};
 
+	template <typename Rng, typename T>
+	void push_to_successors(Rng&& range, push_data_storage<T>&& data){
+		if constexpr (push_data_storage<T>::is_trivial){
+			for(const successor_entry& e : range){
+				e.update(std::move(data));
+			}
+		}else{
+			//try to move
+			const auto size = std::ranges::size(range);
+			if (size == 0)return;
+			if (size == 1){
+				const successor_entry& e = *std::ranges::begin(range);
+				e.update(std::move(data));
+			}else{
+				push_data_storage<T> cropped{std::as_const(data)};
+				auto cur = std::ranges::begin(range);
+				const auto last = std::ranges::prev(std::ranges::end(range));
+
+				while(true){
+					const successor_entry& e = *cur;
+					e.update(std::move(cropped));
+
+					++cur;
+					if(cur != last){
+						if(cropped.is_empty()){
+							cropped = data;
+						}
+					} else{
+						break;
+					}
+				}
+
+				const successor_entry& e = *cur;
+				e.update(std::move(data));
+			}
+		}
+	}
 
 	/**
 	 * @brief 判断在 n0 的 output 中加入 n1 后是否会形成环
@@ -191,13 +228,13 @@ namespace mo_yanxi::react_flow{
 
 
 	protected:
-		propagate_behavior data_propagate_type_{};
+		propagate_type data_propagate_type_{};
 		data_pending_state data_pending_state_{};
 
 	public:
 		[[nodiscard]] node() = default;
 
-		[[nodiscard]] explicit node(propagate_behavior data_propagate_type)
+		[[nodiscard]] explicit node(propagate_type data_propagate_type)
 			: data_propagate_type_(data_propagate_type){
 		}
 
@@ -237,8 +274,12 @@ namespace mo_yanxi::react_flow{
 			return reference_count_ == 0;
 		}
 
-		[[nodiscard]] propagate_behavior get_propagate_type() const noexcept{
+		[[nodiscard]] propagate_type get_propagate_type() const noexcept{
 			return data_propagate_type_;
+		}
+
+		void set_propagate_type(propagate_type type) noexcept{
+			data_propagate_type_ = type;
 		}
 
 		[[nodiscard]] bool is_data_expired() const noexcept{
@@ -379,15 +420,15 @@ namespace mo_yanxi::react_flow{
 #pragma endregion
 
 	protected:
-		void push_update(this const auto& self, push_data_obj& data, data_type_index idx){
-			if(self.data_propagate_type_ == propagate_behavior::eager){
+		/*void push_update(this const auto& self, push_data_obj&& data, data_type_index idx){
+			if(self.data_propagate_type_ == propagate_type::eager){
 				for(const successor_entry& successor : self.get_outputs()){
-					successor.update(data, idx);
+					successor.update(std::move(data), idx);
 				}
 			} else{
 				std::ranges::for_each(self.get_outputs(), &successor_entry::mark_updated);
 			}
-		}
+		}*/
 
 		virtual void on_pulse_received(manager& m){
 			return;
@@ -400,7 +441,7 @@ namespace mo_yanxi::react_flow{
 		 *
 		 * @param in_data ptr to const data, provided by parent
 		 */
-		virtual void on_push(std::size_t from_index, push_data_obj& in_data){
+		virtual void on_push(std::size_t target_index, push_data_obj&& in_data){
 		}
 
 		/**
@@ -408,7 +449,7 @@ namespace mo_yanxi::react_flow{
 		 * @brief Only notify the data has changed, used for lazy nodes. Should be mutually exclusive with update when propagated.
 		 *
 		 */
-		virtual void mark_updated(std::size_t from_index) noexcept{
+		virtual void mark_updated(std::size_t target_index) noexcept{
 			data_pending_state_ = data_pending_state::expired;
 			std::ranges::for_each(get_outputs(), &successor_entry::mark_updated);
 		}
@@ -473,8 +514,8 @@ namespace mo_yanxi::react_flow{
 
 		template <typename S>
 		std::optional<T> request(this S& self, bool allow_expired){
-			if(auto rst = self.request_raw(allow_expired)){
-				return rst.value().fetch();
+			if(auto rst = self.request_raw(allow_expired); rst && rst.value()){
+				return rst.value().get();
 			} else{
 				return std::nullopt;
 			}
@@ -483,8 +524,8 @@ namespace mo_yanxi::react_flow{
 		template <typename S>
 		std::expected<T, data_state> request_stated(this S& self, bool allow_expired){
 			if(auto rst = self.request_raw(allow_expired)){
-				if(auto optal = rst.value().fetch()){
-					return std::expected<T, data_state>{optal.value()};
+				if(auto optal = rst.value()){
+					return std::expected<T, data_state>{optal.value().get()};
 				}
 				return std::unexpected{data_state::failed};
 			} else{
@@ -495,7 +536,7 @@ namespace mo_yanxi::react_flow{
 		template <typename S>
 		std::optional<T> nothrow_request(this S& self, bool allow_expired) noexcept try{
 			if(auto rst = self.request_raw(allow_expired)){
-				return rst.value().fetch();
+				return rst.value().get();
 			}
 			return std::nullopt;
 		} catch(...){
@@ -505,8 +546,8 @@ namespace mo_yanxi::react_flow{
 		template <typename S>
 		std::expected<T, data_state> nothrow_request_stated(this S& self, bool allow_expired) noexcept try{
 			if(auto rst = self.request_raw(allow_expired)){
-				if(auto optal = rst.value().fetch()){
-					return std::expected<T, data_state>{optal.value()};
+				if(auto optal = rst.value()){
+					return std::expected<T, data_state>{optal.value().get()};
 				}
 			}
 			return std::unexpected{data_state::failed};
@@ -550,19 +591,28 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 		//this class should always be eager, make it protected
-		[[nodiscard]] explicit provider_general( propagate_behavior propagate_type)
+		[[nodiscard]] explicit provider_general( propagate_type propagate_type)
 			: type_aware_node<T>{propagate_type}{
 		}
 
 	public:
 		//TODO should these two function virtual?
 
+
 		void update_value(T&& value){
-			this->update_value_unchecked(std::move(value));
+			this->on_push(0, push_data_storage{std::move(value)});
 		}
 
 		void update_value(const T& value){
-			this->update_value_unchecked(T{value});
+			this->on_push(0, push_data_storage{value});
+		}
+
+		void update_value(push_data_storage<T>& data){
+			this->on_push(0, data);
+		}
+
+		void update_value(push_data_storage<T>&& data){
+			this->on_push(0, data);
 		}
 
 		[[nodiscard]] std::span<const data_type_index> get_in_socket_type_index() const noexcept final{
@@ -586,9 +636,6 @@ namespace mo_yanxi::react_flow{
 		}
 
 	private:
-		void update_value_unchecked(T&& value){
-			this->on_push(std::addressof(value));
-		}
 
 		bool connect_successors_impl(const std::size_t slot, node& post) final{
 			if(auto& ptr = post.get_inputs()[slot]){
@@ -604,20 +651,10 @@ namespace mo_yanxi::react_flow{
 	protected:
 		std::vector<successor_entry> successors{};
 
-		virtual void on_push(void* in_data){
-			T* target = static_cast<T*>(in_data);
-			std::size_t count = successors.size();
-			for(std::size_t i = 0; i < count; ++i){
-				if(i == count - 1){
-					push_data_storage<T> data(std::move(*target));
-					successors[i].update(data);
-				} else{
-					push_data_storage<T> data(*target);
-					successors[i].update(data);
-				}
-			}
+		void on_push(std::size_t target_index, push_data_obj&& in_data) override{
+			assert(target_index == 0);
+			react_flow::push_to_successors(successors, push_data_cast<T>(std::move(in_data)));
 		}
-
 	};
 
 	export
@@ -630,13 +667,12 @@ namespace mo_yanxi::react_flow{
 		raw_node_ptr parent{};
 
 	protected:
-		[[nodiscard]] explicit terminal(propagate_behavior data_propagate_type)
+		[[nodiscard]] explicit terminal(propagate_type data_propagate_type)
 			: type_aware_node<T>(data_propagate_type){
 		}
 
 	public:
 		[[nodiscard]] terminal() = default;
-
 
 		static constexpr data_type_index node_data_type_index = unstable_type_identity_of<T>();
 
@@ -699,7 +735,12 @@ namespace mo_yanxi::react_flow{
 		}
 
 
-		virtual void on_update(const T& data){
+		virtual void on_update(push_data_storage<T>& data){
+		}
+
+
+		void on_update(push_data_storage<T>&& data){
+			this->on_update(data);
 		}
 
 		void mark_updated(const std::size_t from_index) noexcept final{
@@ -709,11 +750,11 @@ namespace mo_yanxi::react_flow{
 
 		friend terminal_cached<T>;
 
-		void on_push(const std::size_t from_index, push_data_obj& in_data) override{
+		void on_push(const std::size_t from_index, push_data_obj&& in_data) override{
 			assert(from_index == 0);
 			this->data_pending_state_ = data_pending_state::done;
 			auto& storage = push_data_cast<T>(in_data);
-			this->on_update(storage.get());
+			this->on_update(storage);
 		}
 	};
 
@@ -730,7 +771,7 @@ namespace mo_yanxi::react_flow{
 			return data_state::fresh;
 		}
 
-		[[nodiscard]] explicit terminal_cached(propagate_behavior data_propagate_type)
+		[[nodiscard]] explicit terminal_cached(propagate_type data_propagate_type)
 			: terminal<T>(data_propagate_type){
 		}
 
@@ -747,28 +788,30 @@ namespace mo_yanxi::react_flow{
 		}
 
 	protected:
-		void on_update(const T& data) override{
-			terminal<T>::on_update(data);
-		}
-
 		void on_pulse_received(manager& m) override{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
 			this->data_pending_state_ = data_pending_state::done;
-			this->on_update(cache_);
+
+			push_data_storage d{cache_};
+			this->on_update(d);
 		}
 
-		void on_push(const std::size_t from_index, push_data_obj& in_data) override{
+		void on_push(const std::size_t from_index, push_data_obj&& in_data) override{
 			switch(this->data_propagate_type_){
-			case propagate_behavior::eager : this->data_pending_state_ = data_pending_state::done;
+			case propagate_type::eager : this->data_pending_state_ = data_pending_state::done;
 				{
 					auto& storage = push_data_cast<T>(in_data);
 					cache_ = storage.get();
+
+
+					push_data_storage d{cache_};
+					this->on_update(d);
 				}
-				this->on_update(cache_);
+
 				break;
-			case propagate_behavior::lazy : this->data_pending_state_ = data_pending_state::expired;
+			case propagate_type::lazy : this->data_pending_state_ = data_pending_state::expired;
 				break;
-			case propagate_behavior::pulse : this->data_pending_state_ = data_pending_state::waiting_pulse;
+			case propagate_type::pulse : this->data_pending_state_ = data_pending_state::waiting_pulse;
 				{
 					auto& storage = push_data_cast<T>(in_data);
 					cache_ = storage.get();
@@ -785,8 +828,8 @@ namespace mo_yanxi::react_flow{
 			if(this->is_data_expired()){
 				if(auto rst = this->terminal<T>::request_raw(false)){
 					this->data_pending_state_ = data_pending_state::done;
-					cache_ = rst.value().fetch().value();
-					this->on_update(cache_);
+					cache_ = rst.value().get();
+					this->on_update(push_data_storage{cache_});
 				}
 			}
 		}
@@ -805,18 +848,18 @@ namespace mo_yanxi::react_flow{
 	}
 
 	template <typename T>
-	void successor_entry::update(push_data_storage<T>& data) const{
+	void successor_entry::update(push_data_storage<T>&& data) const{
 		assert(unstable_type_identity_of<T>() == entity->get_in_socket_type_index()[index]);
-		entity->on_push(index, data);
+		entity->on_push(index, std::move(data));
 	}
 
-	void successor_entry::update(push_data_obj& data, data_type_index checker) const{
+	void successor_entry::update(push_data_obj&& data, data_type_index checker) const{
 #if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
 		if(entity->get_in_socket_type_index()[index] != checker){
 			throw invalid_node_error{"Type Mismatch on update"};
 		}
 #endif
-		entity->on_push(index, data);
+		entity->on_push(index, std::move(data));
 	}
 
 	void successor_entry::mark_updated() const{

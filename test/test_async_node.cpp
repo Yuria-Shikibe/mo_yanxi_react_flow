@@ -14,8 +14,8 @@ TEST(AsyncNodeTest, AsyncCancelTest) {
     std::atomic<bool> task_finished = false;
     std::atomic<bool> task_cancelled = false;
 
-    auto& processor = mgr.add_node(make_transformer(
-        propagate_behavior::eager,
+    auto& processor = mgr.add_node(make_async_transformer(
+        propagate_type::eager,
         async_type::def,
         [&](const async_context& ctx, int v) -> int {
             task_started = true;
@@ -76,8 +76,8 @@ TEST(AsyncNodeTest, AsyncFloodLatestTest) {
     std::atomic<int> completed_count = 0;
     std::atomic<int> last_value = 0;
 
-    auto& processor = mgr.add_node(make_transformer(
-        propagate_behavior::eager,
+    auto& processor = mgr.add_node(make_async_transformer(
+        propagate_type::eager,
         async_type::async_latest,
         [&](const async_context& ctx, int v) -> int {
             // Simulate work
@@ -127,8 +127,8 @@ TEST(AsyncNodeTest, AsyncFloodAllTest) {
 
     std::atomic<int> completed_count = 0;
 
-    auto& processor = mgr.add_node(make_transformer(
-        propagate_behavior::eager,
+    auto& processor = mgr.add_node(make_async_transformer(
+        propagate_type::eager,
         async_type::async_all,
         [&](const async_context& ctx, int v) -> int {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -169,8 +169,8 @@ TEST(AsyncNodeTest, AsyncDisconnectTest) {
 
     std::atomic<bool> task_running = false;
 
-    auto& processor = mgr.add_node(make_transformer(
-        propagate_behavior::eager,
+    auto& processor = mgr.add_node(make_async_transformer(
+        propagate_type::eager,
         async_type::def,
         [&](const async_context& ctx, int v) -> int {
             task_running = true;
@@ -216,8 +216,8 @@ TEST(AsyncNodeTest, AsyncProgressTest) {
     manager mgr;
     auto& source = mgr.add_node<provider_cached<int>>();
 
-    auto& processor = mgr.add_node(make_transformer(
-        propagate_behavior::eager,
+    auto& processor = mgr.add_node(make_async_transformer(
+        propagate_type::eager,
         async_type::def,
         [&](const async_context& ctx, int v) -> int {
             for (int i = 1; i <= 10; ++i) {

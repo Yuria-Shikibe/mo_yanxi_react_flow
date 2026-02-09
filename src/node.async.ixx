@@ -3,7 +3,7 @@ module;
 #include <cassert>
 #include <stop_token>
 
-export module mo_yanxi.react_flow:async_nodes;
+export module mo_yanxi.react_flow:async;
 
 import :manager;
 import :node_interface;
@@ -70,7 +70,7 @@ namespace mo_yanxi::react_flow{
 			: async_type_(async_type){
 		}
 
-		[[nodiscard]] explicit async_node(propagate_behavior data_propagate_type, async_type async_type)
+		[[nodiscard]] explicit async_node(propagate_type data_propagate_type, async_type async_type)
 			: type_aware_node<Ret>(data_propagate_type), async_type_(async_type){
 		}
 
@@ -78,7 +78,7 @@ namespace mo_yanxi::react_flow{
 			: manager_(&manager), async_type_(async_type){
 		}
 
-		[[nodiscard]] explicit async_node(manager& manager, propagate_behavior data_propagate_type, async_type async_type)
+		[[nodiscard]] explicit async_node(manager& manager, propagate_type data_propagate_type, async_type async_type)
 			: type_aware_node<Ret>(data_propagate_type), manager_(&manager), async_type_(async_type){
 		}
 
@@ -176,7 +176,7 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 
-		void on_push(std::size_t slot, push_data_obj& in_data) override{
+		void on_push(std::size_t slot, push_data_obj&& in_data) override{
 			assert(slot < arg_count);
 
 			update_data(slot, in_data);
@@ -190,13 +190,13 @@ namespace mo_yanxi::react_flow{
 			}
 
 			switch (this->get_propagate_type()) {
-			case propagate_behavior::eager:
+			case propagate_type::eager:
 				this->async_launch();
 				break;
-			case propagate_behavior::lazy:
+			case propagate_type::lazy:
 				mark_updated(-1);
 				break;
-			case propagate_behavior::pulse:
+			case propagate_type::pulse:
 				this->data_pending_state_ = data_pending_state::waiting_pulse;
 				break;
 			default:
@@ -214,13 +214,6 @@ namespace mo_yanxi::react_flow{
 
 		void on_pulse_received(manager& m) override{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
-
-			if(this->get_trigger_type() == trigger_type::disabled) return;
-
-			if(this->get_trigger_type() == trigger_type::on_pulse){
-				this->set_trigger_type(trigger_type::disabled);
-			}
-
 			this->data_pending_state_ = data_pending_state::done;
 			this->async_launch();
 		}
@@ -281,16 +274,7 @@ namespace mo_yanxi::react_flow{
 		// --- 内部连接辅助 ---
 
 		void async_done(Ret&& val) const{
-			const std::size_t count = this->successors_.size();
-			for(std::size_t i = 0; i < count; ++i){
-				if(i == count - 1){
-					push_data_storage<Ret> data(std::move(val));
-					this->successors_[i].update(data);
-				} else{
-					push_data_storage<Ret> data(std::as_const(val));
-					this->successors_[i].update(data);
-				}
-			}
+			react_flow::push_to_successors(successors_, push_data_storage{std::move(val)});
 		}
 
 		bool connect_successors_impl(std::size_t slot, node& post) final{
@@ -440,20 +424,20 @@ namespace mo_yanxi::react_flow{
 		Fn fn;
 
 	public:
-		[[nodiscard]] explicit async_transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn)
+		[[nodiscard]] explicit async_transformer(propagate_type data_propagate_type, async_type async_type, Fn&& fn)
 			: async_transformer_base_t<Fn, Args...>(data_propagate_type, async_type), fn(std::move(fn)){
 		}
 
-		[[nodiscard]] explicit async_transformer(propagate_behavior data_propagate_type, async_type async_type,
+		[[nodiscard]] explicit async_transformer(propagate_type data_propagate_type, async_type async_type,
 			const Fn& fn)
 			: async_transformer_base_t<Fn, Args...>(data_propagate_type, async_type), fn(fn){
 		}
 
-		[[nodiscard]] explicit async_transformer(propagate_behavior data_propagate_type, async_type async_type, Fn&& fn, manager& manager)
+		[[nodiscard]] explicit async_transformer(propagate_type data_propagate_type, async_type async_type, Fn&& fn, manager& manager)
 			: async_transformer_base_t<Fn, Args...>(data_propagate_type, async_type, manager), fn(std::move(fn)){
 		}
 
-		[[nodiscard]] explicit async_transformer(propagate_behavior data_propagate_type, async_type async_type,
+		[[nodiscard]] explicit async_transformer(propagate_type data_propagate_type, async_type async_type,
 			const Fn& fn, manager& manager)
 			: async_transformer_base_t<Fn, Args...>(data_propagate_type, async_type, manager), fn(fn){
 		}

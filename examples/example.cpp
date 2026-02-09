@@ -1,8 +1,10 @@
 import mo_yanxi.react_flow;
 import mo_yanxi.react_flow.common;
+import modifier_example;
+
 import std;
 
-int main(){
+void simple_io_async_example(){
 	using namespace mo_yanxi::react_flow;
 
 	struct file_reader : async_node<std::string, std::string>{
@@ -44,8 +46,8 @@ int main(){
 
 	manager manager;
 
-	auto& num_input = manager.add_node<provider_cached<std::string>>(propagate_behavior::eager);
-	auto& path_input = manager.add_node<provider_cached<std::string>>(propagate_behavior::eager);
+	auto& num_input = manager.add_node<provider_cached<std::string>>();
+	auto& path_input = manager.add_node<provider_cached<std::string>>();
 
 	auto& stoi_trans = manager.add_node<string_to_arth<int>>();
 	auto& int_trans = manager.add_node(make_transformer([](stoa_result<int> val){
@@ -98,4 +100,11 @@ int main(){
 	while(!done_flag){
 		manager.update();
 	}
+}
+
+
+int main(){
+	modifier_test();
+
+	// simple_io_async_example();
 }

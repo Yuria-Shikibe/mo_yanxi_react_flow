@@ -7,6 +7,7 @@ module;
 
 export module mo_yanxi.react_flow.data_storage;
 
+import mo_yanxi.meta_programming;
 import std;
 
 namespace mo_yanxi::react_flow{
@@ -40,7 +41,7 @@ namespace mo_yanxi::react_flow{
 		active
 	};
 
-	export enum struct propagate_behavior : std::uint8_t{
+	export enum struct propagate_type : std::uint8_t{
 		eager,
 		lazy,
 		pulse
@@ -51,6 +52,8 @@ namespace mo_yanxi::react_flow{
 		expired,
 		waiting_pulse
 	};
+
+
 
 
 	template <std::ranges::input_range Rng>
@@ -67,6 +70,7 @@ namespace mo_yanxi::react_flow{
 		state = T{std::max(std::to_underlying(state), std::to_underlying(other))};
 	}
 
+	struct nit_{};
 
 	export
 	template <typename T>
@@ -76,7 +80,7 @@ namespace mo_yanxi::react_flow{
 	private:
 		union{
 			T value_;
-			struct {} uninit_{};
+			nit_ uninit_{};
 		};
 
 		enum internal_data_state_ : std::underlying_type_t<data_state>{
@@ -315,6 +319,7 @@ namespace mo_yanxi::react_flow{
 	};
 
 
+	/*
 	export
 	template <typename T>
 	struct data_package{
@@ -567,7 +572,7 @@ namespace mo_yanxi::react_flow{
 
 		[[nodiscard]] data_package_optimal() = default;
 
-		[[nodiscard]] explicit data_package_optimal(const T& to_ref) noexcept : storage_(to_ref){
+		[[nodiscard]] explicit(false) data_package_optimal(const T& to_ref) noexcept : storage_(to_ref){
 		}
 
 		template <typename... Args>
@@ -583,31 +588,7 @@ namespace mo_yanxi::react_flow{
 			noexcept(std::is_nothrow_constructible_v<T, Args&&...>) requires (!is_small_object)
 			: storage_(std::in_place, std::forward<Args>(args)...){
 		}
-	};
-
-
-	//TODO return both data and state
-	export
-	template <typename T>
-	using request_pass_handle = request_result<data_package_optimal<T>>;
-
-	export
-	template <typename T>
-	[[nodiscard]] request_pass_handle<T> make_request_handle_unexpected(data_state error) noexcept{
-		return request_pass_handle<T>{error};
-	}
-
-	export
-	template <typename T>
-	[[nodiscard]] request_pass_handle<T> make_request_handle_expected(T&& data, bool isExpired) noexcept{
-		return request_pass_handle<T>(isExpired, std::in_place, std::forward<T>(data));
-	}
-
-	export
-	template <typename T>
-	[[nodiscard]] request_pass_handle<T> make_request_handle_expected_ref(const T& data, bool isExpired) noexcept{
-		return request_pass_handle<T>(isExpired, data);
-	}
+	};*/
 
 
 	//Legacy
@@ -762,26 +743,54 @@ namespace mo_yanxi::react_flow{
 	private:
 		using variant_t = std::variant<std::monostate, const T*, T>;
 	public:
+		using value_type = T;
+		static constexpr bool is_trivial = false;
+
 		// 构造函数：默认初始化 (monostate)
 		constexpr push_data_storage() = default;
 
 		// 构造函数：直接移动传入 T
-		constexpr explicit push_data_storage(T&& val) : storage_(std::move(val)){
+		constexpr explicit(false) push_data_storage(T&& val) : storage_(std::move(val)){
 		}
 
 		// 构造函数：传入 const T*
-		constexpr explicit push_data_storage(const T& ptr) : storage_(&ptr){
+		constexpr explicit(false) push_data_storage(const T& ptr) : storage_(&ptr){
 		}
 
 		// 移动构造和赋值
 		constexpr push_data_storage(push_data_storage&& other) noexcept(std::is_nothrow_move_constructible_v<T>) requires(std::is_move_constructible_v<T>) : storage_(std::exchange(other.storage_, std::monostate{})){}
 		constexpr push_data_storage& operator=(push_data_storage&& other) noexcept(std::is_nothrow_move_assignable_v<T>) requires(std::is_move_assignable_v<T>){
-			storage_ = std::exchange(other.storage_, variant_t{});
+			storage_ = std::exchange(other.storage_, std::monostate{});
 			return *this;
 		}
 
 		constexpr push_data_storage(const push_data_storage&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
 		constexpr push_data_storage& operator=(const push_data_storage&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
+
+
+		constexpr const T* get_view() const noexcept{
+			return std::visit<const T*>([]<typename Ty>(const Ty& input){
+				if constexpr (std::same_as<Ty, std::monostate>){
+					return nullptr;
+				}else if constexpr(std::same_as<Ty, const T*>){
+					return input;
+				}else{
+					return std::addressof(input);
+				}
+			}, storage_);
+		}
+
+		constexpr const T& get_ref_view() const{
+			return std::visit<const T&>([]<typename Ty>(const Ty& input) -> const T& {
+				if constexpr (std::same_as<Ty, std::monostate>){
+					throw std::bad_variant_access{};
+				}else if constexpr(std::same_as<Ty, const T*>){
+					return *input;
+				}else{
+					return input;
+				}
+			}, storage_);
+		}
 
 		[[nodiscard]] constexpr T get(){
 			if(std::holds_alternative<T>(storage_)){
@@ -799,7 +808,7 @@ namespace mo_yanxi::react_flow{
 			throw std::runtime_error("w is empty");
 		}
 
-		[[nodiscard]] constexpr T get_copy() noexcept(std::is_nothrow_copy_constructible_v<T>){
+		[[nodiscard]] constexpr T get_copy() const noexcept(std::is_nothrow_copy_constructible_v<T>){
 			if(std::holds_alternative<T>(storage_)){
 				return std::get<T>(storage_);
 			}
@@ -817,8 +826,20 @@ namespace mo_yanxi::react_flow{
 			return std::holds_alternative<std::monostate>(storage_);
 		}
 
+		constexpr explicit operator bool() const noexcept{
+			return !is_empty();
+		}
+
 		explicit(false) constexpr operator push_data_obj&() noexcept {
 			return reinterpret_cast<push_data_obj&>(*this);
+		}
+
+		explicit(false) constexpr operator push_data_obj&&() &&noexcept {
+			return reinterpret_cast<push_data_obj&&>(*this);
+		}
+
+		constexpr bool tobe_moved() const noexcept{
+			return std::holds_alternative<T>(storage_);
 		}
 
 	private:
@@ -830,31 +851,36 @@ namespace mo_yanxi::react_flow{
 	// 直接持有 T，不使用 Variant
 	// -----------------------------------------------------------------------------
 	template <typename T>
-		requires std::is_trivially_copyable_v<T>
+		requires std::is_trivially_copyable_v<T> && std::is_object_v<T>
 	class push_data_storage<T>{
 	public:
+		using value_type = T;
+		static constexpr bool is_trivial = true;
 		// 构造函数：值初始化
 		constexpr push_data_storage() : value_{}{
 		}
 
-		constexpr explicit push_data_storage(const T& val) : value_(val){
+		constexpr explicit(false) push_data_storage(const T& val) : value_(val){
 		}
 
-		// 平凡类型天然支持高效的拷贝/移动，无需禁用拷贝，
-		// 但为了接口一致性和 move 语义倾向，我们可以保留默认行为。
 		constexpr push_data_storage(const push_data_storage&) = default;
 		constexpr push_data_storage& operator=(const push_data_storage&) = default;
 		constexpr push_data_storage(push_data_storage&&) = default;
 		constexpr push_data_storage& operator=(push_data_storage&&) = default;
 
-		// 核心函数 get
-		// 对于平凡类型，Move 和 Copy 在机器码层面通常是一样的 (memcpy/load)。
-		// 且题目要求“如果不使用 variant... 则直接持有 T”，意味着没有“置空”的状态逻辑。
-		[[nodiscard]] constexpr T get() noexcept {
+		constexpr const T* get_view() const noexcept{
+			return std::addressof(value_);
+		}
+
+		constexpr const T& get_ref_view() const noexcept{
 			return value_;
 		}
 
-		[[nodiscard]] constexpr T get_copy() noexcept{
+		[[nodiscard]] constexpr T get() const noexcept {
+			return value_;
+		}
+
+		[[nodiscard]] constexpr T get_copy() const noexcept{
 			return value_;
 		}
 
@@ -862,9 +888,62 @@ namespace mo_yanxi::react_flow{
 			return reinterpret_cast<push_data_obj&>(*this);
 		}
 
+		explicit(false) constexpr operator push_data_obj&&() && noexcept {
+			return reinterpret_cast<push_data_obj&&>(*this);
+		}
+
+		constexpr bool tobe_moved() const noexcept{
+			return false; //never get invalid after move on a trivial object
+		}
+
+		[[nodiscard]] constexpr bool is_empty() const{
+			return false;
+		}
+
+		constexpr explicit operator bool() const noexcept{
+			return !is_empty();
+		}
+
 	private:
 		T value_;
 	};
+
+	export
+	template <typename T>
+	using data_pass_t =
+		std::conditional_t<push_data_storage<T>::is_trivial,
+			std::conditional_t<(sizeof(T) > sizeof(void*) * 2), const T&, T>, push_data_storage<T>&>;
+
+	export
+	template <typename T>
+		requires (push_data_storage<T>::is_trivial && sizeof(T) <= sizeof(void*) * 2)
+	constexpr data_pass_t<T> pass_data(push_data_storage<T>& input) noexcept {
+		return input.get();
+	}
+
+	export
+	template <typename T>
+		requires (push_data_storage<T>::is_trivial && sizeof(T) > sizeof(void*) * 2)
+	constexpr data_pass_t<T> pass_data(push_data_storage<T>& input) noexcept {
+		return input.get();
+	}
+
+	export
+	template <typename T>
+		requires (!push_data_storage<T>::is_trivial)
+	constexpr data_pass_t<T> pass_data(push_data_storage<T>& input) noexcept {
+		return input;
+	}
+
+	export
+	template <typename T>
+		requires (std::is_trivially_copyable_v<T> && std::is_object_v<T>)
+	push_data_storage(const T&) -> push_data_storage<T>;
+
+	export
+	template <typename T>
+	requires (!std::is_trivially_copyable_v<std::remove_cvref_t<T>>)
+	push_data_storage(T&&) -> push_data_storage<std::remove_cvref_t<T>>;
 
 	export
 	template <typename T>
@@ -877,5 +956,315 @@ namespace mo_yanxi::react_flow{
 	const push_data_storage<T>& push_data_cast(const push_data_obj& obj) noexcept{
 		return reinterpret_cast<const push_data_storage<T>&>(obj);
 	}
+
+	export
+	template <typename T>
+	push_data_storage<T>&& push_data_cast(push_data_obj&& obj) noexcept{
+		return reinterpret_cast<push_data_storage<T>&&>(obj);
+	}
+
+	export
+	template <typename T>
+	const push_data_storage<T>&& push_data_cast(const push_data_obj&& obj) noexcept{
+		return reinterpret_cast<const push_data_storage<T>&&>(obj);
+	}
+
+
+
+	//TODO return both data and state
+	export
+	template <typename T>
+	using request_pass_handle = request_result<push_data_storage<T>>;
+
+	export
+	template <typename T>
+	[[nodiscard]] request_pass_handle<T> make_request_handle_unexpected(data_state error) noexcept{
+		return request_pass_handle<T>{error};
+	}
+
+	export
+	template <typename T>
+	[[nodiscard]] request_pass_handle<std::decay_t<T>> make_request_handle_expected(T&& data, bool isExpired) noexcept{
+		return request_pass_handle<std::decay_t<T>>(isExpired, std::forward<T>(data));
+	}
+
+	export
+	template <typename T>
+	[[nodiscard]] request_pass_handle<T> make_request_handle_expected_ref(const T& data, bool isExpired) noexcept{
+		return request_pass_handle<T>(isExpired, data);
+	}
+
+	export
+	template <typename T>
+	[[nodiscard]] request_pass_handle<T> make_request_handle_expected_from_data_storage(push_data_storage<T>&& data, bool isExpired) noexcept{
+		return request_pass_handle<T>(isExpired, std::move(data));
+	}
+
+
+}
+
+namespace mo_yanxi::react_flow{
+	export
+	template <typename  T, bool has_it = false>
+	struct optional_val{
+		using value_type = T;
+
+		optional_val& operator=(const T& val) noexcept{
+			return *this;
+		}
+
+		optional_val& operator=(T&& val) noexcept{
+			return *this;
+		}
+	};
+
+
+	export
+	template <typename T>
+	struct optional_val<T, true>{
+		using value_type = T;
+		T value;
+
+		const T& operator*() const noexcept{
+			return value;
+		}
+
+		T& operator*() noexcept{
+			return value;
+		}
+
+		optional_val& operator=(const T& val) noexcept(std::is_nothrow_copy_assignable_v<T>){
+			value = val;
+			return *this;
+		}
+
+		optional_val& operator=(T&& val) noexcept(std::is_nothrow_move_assignable_v<T>){
+			value = std::move(val);
+			return *this;
+		}
+	};
+
+	export
+	struct descriptor_tag{
+		/**
+		 * @brief enable node-local cache
+		 */
+		bool cache;
+
+		/**
+		 * @brief if set, node won't push forward when relevant data is updated
+		 */
+		bool quiet;
+
+		/**
+		 * @brief disallow expired on fetch request
+		 */
+		bool fresh;
+	};
+
+	static_assert(std::ranges::view<std::span<int>>);
+
+	template <typename S, typename D>
+		requires (std::convertible_to<S, D>)
+	struct convertor{
+
+		FORCE_INLINE static D operator()(push_data_storage<S>& input) requires (!std::ranges::view<D> && !std::same_as<S, D>){
+			return input.get();
+		}
+
+		FORCE_INLINE static D operator()(push_data_storage<S>& input) requires (std::ranges::view<D> && !std::same_as<S, D>){
+			return input.get_ref_view();
+		}
+
+		FORCE_INLINE static push_data_storage<D>&& operator()(push_data_storage<S>&& input) noexcept requires (std::same_as<S, D>){
+			return std::move(input);
+		}
+	};
+
+	export
+	template <typename InputType, descriptor_tag Tag = {}, typename OutputType = InputType, typename ConvertorTy = convertor<InputType, OutputType>>
+		requires requires(push_data_storage<InputType>&& input, const ConvertorTy& transformer){
+			{ std::invoke(transformer, std::move(input)) } -> std::convertible_to<push_data_storage<OutputType>>;
+		}
+	struct EMPTY_BASE descriptor{
+		using input_type = InputType;
+		using output_type = OutputType;
+		using convertor_type = ConvertorTy;
+		static constexpr descriptor_tag tag = Tag;
+
+		//TODO check std::ref/const_ref?
+		static_assert(!(std::ranges::view<OutputType> && !tag.cache), "view from input must have it cached, or it will casue dangling");
+		static_assert(std::convertible_to<std::invoke_result_t<convertor_type, push_data_storage<input_type>&&>, push_data_storage<output_type>>);
+		static_assert(std::is_object_v<InputType>);
+
+	private:
+		ADAPTED_NO_UNIQUE_ADDRESS optional_val<input_type, tag.cache> value;
+		ADAPTED_NO_UNIQUE_ADDRESS convertor_type transformer;
+
+	public:
+		constexpr descriptor() = default;
+		explicit constexpr descriptor(const convertor_type& transformer) : transformer(transformer){}
+		explicit constexpr descriptor(convertor_type&& transformer) : transformer(std::move(transformer)){}
+
+		FORCE_INLINE constexpr const convertor_type& get_transformer() const noexcept{
+			return transformer;
+		}
+
+		FORCE_INLINE constexpr push_data_storage<output_type> get() const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, const input_type&>) requires(tag.cache){
+			push_data_storage data{*value}; //make l value
+			return std::invoke(transformer, data);
+		}
+
+		FORCE_INLINE constexpr push_data_storage<output_type> get(push_data_storage<input_type>& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
+			return std::invoke(transformer, pushed);
+		}
+
+
+		FORCE_INLINE constexpr push_data_storage<output_type> get(push_data_storage<input_type>&& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
+			return std::invoke(transformer, std::move(pushed));
+		}
+
+
+		FORCE_INLINE output_type operator*() const requires(tag.cache){
+			return get().get();
+		}
+
+
+		constexpr push_data_storage<output_type> operator<<(push_data_storage<input_type>&& pushed){
+			if constexpr (tag.cache){
+				*value = pushed.get();
+				return this->get();
+			}else{
+				return this->get(std::move(pushed));
+			}
+		}
+
+		constexpr void set(push_data_storage<input_type>& pushed) requires(tag.cache){
+			*value = pushed.get();
+		}
+
+		constexpr void set(push_data_storage<input_type>&& pushed) requires(tag.cache){
+			this->set(pushed);
+		}
+
+		constexpr void set(const input_type& pushed) requires(tag.cache){
+			*value = pushed;
+		}
+
+		constexpr void set(input_type&& pushed) requires(tag.cache){
+			*value = std::move(pushed);
+		}
+	};
+
+	template <typename T>
+	struct is_spec_of_descriptor : std::false_type{};
+
+
+	template <typename InputType, descriptor_tag Tag, typename Trans, typename Transf>
+	struct is_spec_of_descriptor<descriptor<InputType, Tag, Trans, Transf>> : std::true_type{};
+
+	export
+	template <typename T>
+	concept spec_of_descriptor = is_spec_of_descriptor<T>::value;
+
+	export
+	template <spec_of_descriptor T>
+	struct descriptor_trait{
+		using input_type = T::input_type;
+		using output_type = T::output_type;
+		using convertor_type = T::convertor_type;
+
+		using input_pass_type = push_data_storage<input_type>;
+		using output_pass_type = push_data_storage<output_type>;
+
+		using operator_pass_type = data_pass_t<output_type>;
+		static constexpr descriptor_tag tag = T::tag;
+		static constexpr bool cached = tag.cache;
+		static constexpr bool identity = std::same_as<input_type, output_type>;
+		static constexpr bool allow_expired = !tag.fresh;
+		static constexpr bool no_push = tag.quiet;
+	};
+
+	/*
+	template <typename ...Args>
+		requires (spec_of_descriptor<Args> && ...)
+	struct argument_descriptor{
+		using args_descriptor_tuple = std::tuple<Args...>;
+		static constexpr std::size_t cached_count = (static_cast<std::size_t>(descriptor_trait<Args>::cached) + ... + 0);
+
+		args_descriptor_tuple arguments_;
+		ADAPTED_NO_UNIQUE_ADDRESS std::bitset<cached_count> dirty_flags_;
+
+		bool is_dirty() const noexcept{
+			return dirty_flags_.any();
+		}
+	};*/
+
+	template <std::size_t N>
+	consteval std::array<smallest_uint_t<N>, N> make_index_array(const bool(& input)[N]){
+		smallest_uint_t<N> sz{};
+		std::array<smallest_uint_t<N>, N> rst;
+		for(std::size_t i = 0; i < N; ++i){
+			if(input[i]){
+				rst[i] = sz;
+				++sz;
+			}else{
+				rst[i] = std::numeric_limits<smallest_uint_t<N>>::max();
+			}
+		}
+		return rst;
+	}
+
+	export
+	template <bool... cache_bit>
+	struct dirty_bits{
+		static constexpr std::size_t total_bits = sizeof...(cache_bit);
+		static constexpr std::array<smallest_uint_t<total_bits>, total_bits> indices{react_flow::make_index_array({cache_bit...})};
+		static constexpr std::size_t cached_count = (static_cast<std::size_t>(cache_bit) + ... + 0uz);
+
+	private:
+		ADAPTED_NO_UNIQUE_ADDRESS std::bitset<cached_count> dirty_flags;
+
+	public:
+		FORCE_INLINE static constexpr bool has_bit(std::size_t index) noexcept{
+			return index < total_bits && indices[index] != std::numeric_limits<smallest_uint_t<total_bits>>::max();
+		}
+
+		FORCE_INLINE constexpr void clear() noexcept{
+			dirty_flags = {};
+		}
+
+		FORCE_INLINE constexpr bool is_dirty() const noexcept{
+			return dirty_flags.any();
+		}
+
+		FORCE_INLINE constexpr bool check_requires_reload(std::size_t slot){
+			if(!has_bit(slot))return true;
+			return !get(slot);
+		}
+
+		FORCE_INLINE constexpr bool get(std::size_t slot) const noexcept{
+			return dirty_flags.test(indices[slot]);
+		}
+
+		FORCE_INLINE constexpr void set(std::size_t slot, bool t = true) noexcept{
+			dirty_flags.set(indices[slot], t);
+		}
+
+		template <std::size_t Idx>
+			requires (has_bit(Idx))
+		FORCE_INLINE constexpr void set(bool t = true) noexcept{
+			dirty_flags.set(indices[Idx], t);
+		}
+
+		FORCE_INLINE constexpr bool try_set(std::size_t slot) noexcept{
+			if(!has_bit(slot))return true;
+			if(!get(slot)){
+				dirty_flags.set(indices[slot]);
+				return true;
+			}
+			return false;
+		}
+	};
 
 }

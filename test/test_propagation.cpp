@@ -30,13 +30,13 @@ TEST(PropagationTest, LazyPropagation) {
     
     int computation_count = 0;
     // transformer with lazy behavior
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
+    auto& trans = mgr.add_node(make_transformer(propagate_type::lazy, [&](int v){
         computation_count++;
         return v * 2;
     }));
 
     // terminal_cached with lazy behavior
-    auto& term = mgr.add_node<terminal_cached<int>>(propagate_behavior::lazy);
+    auto& term = mgr.add_node<terminal_cached<int>>(propagate_type::lazy);
     
     p.connect_successor(trans);
     trans.connect_successor(term);
@@ -63,7 +63,7 @@ TEST(PropagationTest, LazyPropagation) {
 
 TEST(PropagationTest, PulsePropagation) {
     manager mgr;
-    auto& p = mgr.add_node<provider_cached<int>>(propagate_behavior::pulse);
+    auto& p = mgr.add_node<provider_cached<int>>(propagate_type::pulse);
     
     int received_value = 0;
 

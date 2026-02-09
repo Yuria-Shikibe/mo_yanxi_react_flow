@@ -1,2 +1,5 @@
 .xmake/
 build/
+/.venv/
+/_ReSharper.Caches/
+/cmake-build-debug/

@@ -12,78 +12,7 @@ TEST(CachingTest, ProviderCached) {
     
     auto handle = p.request_raw(false);
     ASSERT_TRUE(handle.has_value());
-    EXPECT_EQ(handle.value().fetch().value(), 123);
-}
-
-TEST(CachingTest, ModifierTransientVsCachedArguments) {
-    manager mgr;
-    auto& p = mgr.add_node<provider_cached<int>>();
-    
-    int upstream_compute_count = 0;
-    // Upstream node that counts computations
-    auto& upstream = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
-        upstream_compute_count++;
-        return v;
-    }));
-    
-    p.connect_successor(upstream);
-    
-    // Case 1: Transient downstream
-    int transient_compute_count = 0;
-    auto& downstream_transient = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
-        transient_compute_count++;
-        return v;
-    }));
-    
-    upstream.connect_successor(downstream_transient);
-    
-    p.update_value(1);
-    
-    // Request downstream
-    downstream_transient.request(true);
-    EXPECT_EQ(upstream_compute_count, 1);
-    EXPECT_EQ(transient_compute_count, 1);
-    
-    // Request again - Transient node requests upstream again
-    downstream_transient.request(true);
-    EXPECT_EQ(upstream_compute_count, 2); // Increased!
-    EXPECT_EQ(transient_compute_count, 2);
-    
-    
-    // Case 2: Argument Cached downstream
-    upstream.disconnect_successor(downstream_transient);
-    upstream_compute_count = 0; // Reset
-    
-    int cached_compute_count = 0;
-    
-    struct my_cached_node : modifier_argument_cached<int, int> {
-        using modifier_argument_cached::modifier_argument_cached;
-        int* counter;
-        int operator()(const int& arg) override {
-            (*counter)++;
-            return arg;
-        }
-    };
-    
-    auto& downstream_cached = mgr.add_node<my_cached_node>(propagate_behavior::lazy);
-    downstream_cached.counter = &cached_compute_count;
-    
-    upstream.connect_successor(downstream_cached);
-    
-    // Need to trigger update to mark dirty? 
-    // update_value was called before connection.
-    p.update_value(2); 
-    // Upstream gets notified. Upstream notifies downstream.
-    
-    // Request downstream
-    downstream_cached.request(true);
-    EXPECT_EQ(upstream_compute_count, 1);
-    EXPECT_EQ(cached_compute_count, 1);
-    
-    // Request again - Cached node uses cached arguments, DOES NOT request upstream
-    downstream_cached.request(true);
-    EXPECT_EQ(upstream_compute_count, 1); // Stays same!
-    EXPECT_EQ(cached_compute_count, 2); // Re-computes (since result is not cached, only args)
+    EXPECT_EQ(handle.value().get(), 123);
 }
 
 TEST(CachingTest, TerminalCached) {
@@ -91,12 +20,12 @@ TEST(CachingTest, TerminalCached) {
     auto& p = mgr.add_node<provider_cached<int>>();
     
     int compute_count = 0;
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::lazy, [&](int v){
+    auto& trans = mgr.add_node(make_transformer(propagate_type::lazy, [&](int v){
         compute_count++;
         return v;
     }));
     
-    auto& term = mgr.add_node<terminal_cached<int>>(propagate_behavior::lazy);
+    auto& term = mgr.add_node<terminal_cached<int>>(propagate_type::lazy);
     
     p.connect_successor(trans);
     trans.connect_successor(term);

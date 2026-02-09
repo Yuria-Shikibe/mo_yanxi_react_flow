@@ -56,15 +56,17 @@ struct TestListener : terminal<MoveTracker> {
     bool& updated;
     std::string name;
 
-    TestListener(propagate_behavior pb, bool& u, std::string n)
+    TestListener(propagate_type pb, bool& u, std::string n)
         : terminal<MoveTracker>(pb), updated(u), name(std::move(n)) {}
 
-    void on_update(const MoveTracker& data) override {
+public:
+    void on_update(push_data_storage<MoveTracker>& data) override {
+        const auto& v = data.get_ref_view();
         // Ignore initial synchronization where value is empty
-        if (data.value == "") return;
+        if (v.value == "") return;
 
         updated = true;
-        EXPECT_EQ(data.value, "payload") << "Listener " << name << " received wrong value";
+        EXPECT_EQ(v.value, "payload") << "Listener " << name << " received wrong value";
     }
 };
 
@@ -72,12 +74,12 @@ TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     manager mgr;
     auto& p = mgr.add_node<provider_cached<MoveTracker>>();
 
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
+    auto& trans = mgr.add_node(make_transformer(propagate_type::eager, [&](MoveTracker v){
         return v;
     }));
 
     bool updated = false;
-    auto& t = mgr.add_node<TestListener>(propagate_behavior::eager, updated, "Single");
+    auto& t = mgr.add_node<TestListener>(propagate_type::eager, updated, "Single");
 
     p.connect_successor(trans);
     trans.connect_successor(t);
@@ -116,7 +118,7 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
     manager mgr;
     auto& p = mgr.add_node<provider_cached<MoveTracker>>();
 
-    auto& trans = mgr.add_node(make_transformer(propagate_behavior::eager, [&](MoveTracker v){
+    auto& trans = mgr.add_node(make_transformer(propagate_type::eager, [&](MoveTracker v){
         return v;
     }));
 
@@ -124,9 +126,9 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
     bool t2_updated = false;
     bool t3_updated = false;
 
-    auto& t1 = mgr.add_node<TestListener>(propagate_behavior::eager, t1_updated, "T1");
-    auto& t2 = mgr.add_node<TestListener>(propagate_behavior::eager, t2_updated, "T2");
-    auto& t3 = mgr.add_node<TestListener>(propagate_behavior::eager, t3_updated, "T3");
+    auto& t1 = mgr.add_node<TestListener>(propagate_type::eager, t1_updated, "T1");
+    auto& t2 = mgr.add_node<TestListener>(propagate_type::eager, t2_updated, "T2");
+    auto& t3 = mgr.add_node<TestListener>(propagate_type::eager, t3_updated, "T3");
 
     p.connect_successor(trans);
 

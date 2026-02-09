@@ -5,6 +5,7 @@ module;
 export module mo_yanxi.react_flow.common;
 
 export import mo_yanxi.react_flow;
+import mo_yanxi.concepts;
 import mo_yanxi.meta_programming;
 import std;
 
@@ -33,13 +34,11 @@ stoa_result<Arth> stoa(const char* src, const char* dst, Arg from_chars_argument
 	Arth val;
 	const auto rst = std::from_chars(src, dst, val, from_chars_argument);
 	switch(rst.ec){
-	case std::errc{}:
-		return val;
 	case std::errc::invalid_argument:
 		return std::unexpected{stoa_err::invalid_input};
 	case std::errc::result_out_of_range:
 		return std::unexpected{stoa_err::out_of_range};
-	default: std::unreachable();
+	default: return val;
 	}
 }
 
@@ -98,15 +97,15 @@ struct string_to_arth : relay<stoa_result<Arth>, Str>{
 	}
 
 	[[nodiscard]] string_to_arth(
-		propagate_behavior data_propagate_type,
+		propagate_type data_propagate_type,
 		from_chars_param_type from_chars_argument)
 	: relay<std::expected<Arth, stoa_err>, Str>(data_propagate_type),
 	from_chars_argument(from_chars_argument){
 	}
 
 protected:
-	return_type operator()(data_package_optimal<Str>&& input) override{
-		return this->operator()(*input.get());
+	return_type operator()(push_data_storage<Str>& input) override{
+		return this->operator()(input.get());
 	}
 
 	return_type operator()(const Str& input) override{
@@ -126,7 +125,7 @@ struct listener : terminal<Arg>{
 
 	template <typename FnTy>
 		requires (std::constructible_from<Fn, FnTy&&>)
-	[[nodiscard]] listener(propagate_behavior data_propagate_type, FnTy&& fn)
+	[[nodiscard]] listener(propagate_type data_propagate_type, FnTy&& fn)
 	: terminal<Arg>(data_propagate_type),
 	fn(std::forward<FnTy>(fn)){
 	}
@@ -136,24 +135,38 @@ struct listener : terminal<Arg>{
 	}
 
 protected:
-	void on_update(const Arg& data) override{
+	void on_update(push_data_storage<Arg>& data) override{
 		std::invoke(fn, data);
 	}
 };
 
-
 export
 template <typename Fn>
-auto make_listener(propagate_behavior data_propagate_type, Fn&& fn){
+auto make_listener(propagate_type data_propagate_type, Fn&& fn){
 	using FnTrait = mo_yanxi::function_traits<Fn>::mem_func_args_type;
+	using ArgTy = std::tuple_element_t<0, FnTrait>;
+	using DecayTy = std::decay_t<ArgTy>;
 	static_assert(std::tuple_size_v<FnTrait> == 1);
-	return listener<std::decay_t<Fn>, std::decay_t<std::tuple_element_t<0, FnTrait>>>{data_propagate_type, std::forward<Fn>(fn)};
+	if constexpr (spec_of<DecayTy, push_data_storage>){
+		return listener<std::decay_t<Fn>, typename DecayTy::value_type>{data_propagate_type, std::forward<Fn>(fn)};
+	}else if constexpr (std::is_lvalue_reference_v<ArgTy> && std::is_const_v<std::remove_reference_t<ArgTy>>){
+		//if is const reference, pass by view
+		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](push_data_storage<DecayTy>& data){
+			std::invoke(f, data.get_ref_view());
+		});
+	}else if constexpr (!std::is_lvalue_reference_v<ArgTy>){
+		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](push_data_storage<DecayTy>& data){
+			std::invoke(f, data.get());
+		});
+	}else{
+		static_assert(false, "type variant not supported");
+	}
 }
 
 export
 template <typename Fn>
 auto make_listener(Fn&& fn){
-	return react_flow::make_listener(propagate_behavior::eager, std::forward<Fn>(fn));
+	return react_flow::make_listener(propagate_type::eager, std::forward<Fn>(fn));
 }
 
 }
