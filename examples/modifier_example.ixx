@@ -64,4 +64,15 @@ void modifier_test(){
 	num_input.update_value("555");
 
 	fetch();
+
+/*
+Expected:
+!Push: input * 2 = 246
+!Push: input * 2 = 1302414
+!Fetch: 1302414
+!Push: nullopt
+!Push: nullopt
+!Fetch: nullopt
+!Fetch: 1110
+*/
 }

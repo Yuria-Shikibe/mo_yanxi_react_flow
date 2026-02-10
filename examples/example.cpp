@@ -7,10 +7,20 @@ import std;
 void simple_io_async_example(){
 	using namespace mo_yanxi::react_flow;
 
-	struct file_reader : async_node<std::string, std::string>{
-	protected:
-		std::string operator()(const async_context& ctx, std::string&& filepath) override{
-			std::ifstream file(filepath);
+	bool done_flag{};
+
+	manager manager;
+
+	auto& num_input = manager.add_node<provider_cached<std::string>>();
+	auto& path_input = manager.add_node<provider_cached<std::string>>();
+
+	auto& stoi_trans = manager.add_node<string_to_arth<int>>();
+	auto& int_trans = manager.add_node(make_transformer([](stoa_result<int> val){
+		return val.value_or(0) * 2;
+	}));
+
+	auto node = make_async_transformer([](const async_context& ctx, std::string&& filepath) -> std::string {
+		std::ifstream file(filepath);
 
 			if(!std::filesystem::exists(filepath)){
 				return {};
@@ -34,27 +44,14 @@ void simple_io_async_example(){
 				result += line;
 				result += "\n";
 				ctx.task->set_progress(result.size(), total);
-				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
 
 			ctx.task->set_progress_done();
 			return result;
-		}
-	};
+	});
 
-	bool done_flag{};
-
-	manager manager;
-
-	auto& num_input = manager.add_node<provider_cached<std::string>>();
-	auto& path_input = manager.add_node<provider_cached<std::string>>();
-
-	auto& stoi_trans = manager.add_node<string_to_arth<int>>();
-	auto& int_trans = manager.add_node(make_transformer([](stoa_result<int> val){
-		return val.value_or(0) * 2;
-	}));
-
-	auto& path_reader = manager.add_node<file_reader>();
+	auto& path_reader = manager.add_node(std::move(node));
 
 	auto& formatter = manager.add_node(make_transformer<descriptor<std::string, {true}, std::string_view>, descriptor<int, {.quiet = true}>>([](std::string_view str, int val){
 		return std::format("{} -- {}", str, val);

@@ -208,9 +208,6 @@ namespace mo_yanxi::react_flow{
 		friend manager;
 		friend node_pointer;
 
-		template <typename Ret, typename... Args>
-		friend struct modifier_base;
-
 	private:
 		std::size_t reference_count_{};
 

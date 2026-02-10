@@ -1,5 +1,6 @@
 # Brief
 * This library is a light and *module interface only* data graph publisher-receiver framework. Used for light task/change auto propagation.
+* Like a extremely light version of _taskflow_, but makes trivial operations have little overhead. Which also means this library is NOT designed for high concurrency and parallel required condition.
 
 ![sample.drawio.svg](properties/sample.drawio.svg)
 
@@ -34,17 +35,19 @@ The significance of having this set of conversions within the node is to facilit
 
 **Note:** Currently, safe built-in conversions are only performed for types satisfying the `std::ranges::view` concept. Using types such as `std::reference_wrapper` as transform result may lead to **dangling references**. Future updates will aim to ensure this is prohibited at compile-time.
 
+# Async Specification
+* Except for async node task relevant operations and async push task to manager, everything should happens on manager thread.
 
-# Mode Specify
+# Mode Specification
 //TBD
 
-# State Specify
+# State Specification
 //TBD
 
-# Async Specify
+# Async Specification
 //TBD
 
 # Note
 * NEVER make this library as a shared library (issue from type info implementation, may support this by offering an option that using std::type_info and give up some performance.)
-* Node without **cache** should never be set to pulse mode.
+* Node without any **cache** at local or context is not recommended to be set to pulse mode.
 * If `make_xxx` function is available, use it instead of call constructors.

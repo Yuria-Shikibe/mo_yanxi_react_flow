@@ -77,7 +77,7 @@ std::string to_string(const stoa_result<T>& rst){
 
 export
 template <typename Arth, typename Str = std::string>
-struct string_to_arth : modifier<descriptor<stoa_result<Arth>, {true}>, descriptor<Str>>{
+struct string_to_arth : modifier<descriptor<stoa_result<Arth>, descriptor_tag{true}>, descriptor<Str>>{
 	using return_type = stoa_result<Arth>;
 	using from_chars_param_type = std::conditional_t<std::floating_point<Arth>, std::chars_format, int>;
 
@@ -89,7 +89,7 @@ struct string_to_arth : modifier<descriptor<stoa_result<Arth>, {true}>, descript
 		}
 	}();
 
-	using modifier<descriptor<stoa_result<Arth>, {true}>, descriptor<Str>>::modifier;
+	string_to_arth() = default;
 
 	[[nodiscard]] explicit string_to_arth(
 		from_chars_param_type from_chars_argument)
@@ -99,8 +99,13 @@ struct string_to_arth : modifier<descriptor<stoa_result<Arth>, {true}>, descript
 	[[nodiscard]] string_to_arth(
 		propagate_type data_propagate_type,
 		from_chars_param_type from_chars_argument)
-		: modifier<descriptor<stoa_result<Arth>, {true}>, descriptor<Str>>(data_propagate_type),
+		: modifier<descriptor<stoa_result<Arth>, descriptor_tag{true}>, descriptor<Str>>(data_propagate_type),
 		from_chars_argument(from_chars_argument){
+	}
+
+	[[nodiscard]] explicit string_to_arth(
+		propagate_type data_propagate_type)
+		: modifier<descriptor<stoa_result<Arth>, descriptor_tag{true}>, descriptor<Str>>(data_propagate_type){
 	}
 
 protected:

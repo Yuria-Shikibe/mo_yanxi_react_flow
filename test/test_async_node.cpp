@@ -228,8 +228,8 @@ TEST(AsyncNodeTest, AsyncProgressTest) {
         }
     ));
 
-    std::atomic<float> last_progress = 0.0f;
-    std::atomic<bool> progress_received = false;
+    float last_progress = 0.0f;
+    bool progress_received = false;
 
     auto& progress_listener = mgr.add_node(make_listener([&](progress_check p){
         if (p.changed) {
@@ -238,7 +238,13 @@ TEST(AsyncNodeTest, AsyncProgressTest) {
         }
     }));
 
+    auto& dummy = mgr.add_node(make_listener([&](int p){
+
+    }));
+
+
     source.connect_successor(processor); // ADDED THIS
+    processor.connect_successor(dummy);
     processor.add_progress_receiver(progress_listener);
 
     mgr.push_posted_act([&]{
