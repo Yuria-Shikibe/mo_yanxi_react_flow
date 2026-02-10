@@ -130,6 +130,7 @@ target("mo_yanxi.react_flow")
         add_deps(pkg_name, {public = true})
     else
         add_packages(pkg_name, {public = true})
+        add_includedirs("include", {public = true})
 
         if is_mode("cmake_gen") then
             on_load(function (target)
