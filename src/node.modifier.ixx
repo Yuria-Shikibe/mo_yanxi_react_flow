@@ -165,7 +165,7 @@ namespace mo_yanxi::react_flow{
 			if constexpr(!has_trigger){
 				return true;
 			} else{
-				if constexpr(descriptor_trait<std::tuple_element<trigger_index, input_descriptors>>::cached){
+				if constexpr(descriptor_trait<std::tuple_element_t<trigger_index, input_descriptors>>::cached){
 					switch(trigger_type& trigger = *std::get<trigger_index>(arguments_)){
 					case trigger_type::active : return true;
 					case trigger_type::disabled : return false;
@@ -222,13 +222,11 @@ namespace mo_yanxi::react_flow{
 			}
 
 			trigger_type trigger{};
-			if constexpr(has_trigger && requires{
-				requires trigger_index < std::tuple_size_v<input_descriptors>; /*workaround for msvc*/
-			}){
+			if constexpr(has_trigger){
 				if(target_index == trigger_index){
 					auto rst = data_carrier_cast<trigger_type>(in_data).get();
 					using DescriptorTy = std::tuple_element_t<trigger_index, input_descriptors>;
-					if(descriptor_trait<DescriptorTy>::cached && descriptor_trait<DescriptorTy>::identity){
+					if constexpr(descriptor_trait<DescriptorTy>::cached && descriptor_trait<DescriptorTy>::identity){
 						std::get<trigger_index>(arguments_).set(
 							rst == trigger_type::once ? trigger_type::disabled : rst);
 						expired_flags_.template set<trigger_index>();
