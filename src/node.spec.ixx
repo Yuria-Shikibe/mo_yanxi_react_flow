@@ -7,6 +7,7 @@ export module mo_yanxi.react_flow:endpoint;
 
 import :manager;
 import :node_interface;
+import :successory_list;
 
 import mo_yanxi.react_flow.data_storage;
 import mo_yanxi.meta_programming;
@@ -75,15 +76,15 @@ namespace mo_yanxi::react_flow{
 			if(auto& ptr = post.get_inputs()[slot]){
 				post.erase_predecessor_single_edge(slot, *ptr);
 			}
-			return node::try_insert(successors, slot, post);
+			return try_insert(successors, slot, post);
 		}
 
 		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
-			return node::try_erase(successors, slot, post);
+			return try_erase(successors, slot, post);
 		}
 
 	protected:
-		std::vector<successor_entry> successors{};
+		successor_list successors{};
 
 		void on_push(std::size_t target_index, data_carrier_obj&& in_data) override{
 			assert(target_index == 0);
@@ -98,6 +99,8 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename T>
 	struct terminal : type_aware_node<T>{
+		friend node;
+
 	private:
 		raw_node_ptr parent{};
 
@@ -191,11 +194,18 @@ namespace mo_yanxi::react_flow{
 			auto& storage = push_data_cast<T>(in_data);
 			this->on_update(storage);
 		}
+
+	public:
+		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr() const noexcept override{
+			return this->get_this_class_push_dispatch_fptr();
+		}
 	};
 
 	export
 	template <typename T>
 	struct terminal_cached : terminal<T>{
+		friend node;
+
 		[[nodiscard]] const T& request_cache(){
 			update_cache();
 			return cache_;
@@ -267,6 +277,12 @@ namespace mo_yanxi::react_flow{
 					this->on_update(data_carrier{cache_});
 				}
 			}
+		}
+
+
+	public:
+		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr() const noexcept override{
+			return this->get_this_class_push_dispatch_fptr();
 		}
 	};
 

@@ -1,7 +1,7 @@
 module;
 
 #include <cassert>
-#include <stop_token>
+#include <mo_yanxi/adapted_attributes.hpp>
 
 export module mo_yanxi.react_flow:async;
 
@@ -199,34 +199,34 @@ namespace mo_yanxi::react_flow{
 		}
 	};
 
-	template <typename T>
-	using optional_value_type_t = typename std::optional<T>::value_type;
+	template <typename Fn, typename... Args>
+	struct async_result_helper {
+		using type = std::invoke_result_t<Fn, Args...>;
+	};
 
 	template <typename Fn, typename... Args>
-	consteval auto test_invoke_result_async(){
-		if constexpr(std::invocable<Fn, const async_context&, Args...>){
-			return std::type_identity<optional_value_type_t<std::invoke_result_t<Fn, const async_context&, Args...>>>
-				{};
-		} else{
-			// Should not happen for async transformer if strict check
-			return std::type_identity<optional_value_type_t<std::invoke_result_t<Fn, Args...>>>{};
-		}
-	}
+		requires std::invocable<Fn, const async_context&, Args...>
+	struct async_result_helper<Fn, Args...> {
+		using type = std::invoke_result_t<Fn, const async_context&, Args...>;
+	};
+
+	template <typename Fn, typename... Args>
+	using test_invoke_result_async_t = typename async_result_helper<Fn, Args...>::type;
 
 	export
 	template <typename Ret, typename Fn, typename... Args>
-	struct async_transformer_v2 final : async_node<Ret, Args...>{
+	struct async_transformer final : async_node<Ret, Args...>{
 	private:
 		Fn fn;
 
 	public:
-		async_transformer_v2() = default;
+		async_transformer() = default;
 
-		[[nodiscard]] explicit async_transformer_v2(propagate_type data_propagate_type, async_type async_type, Fn&& fn)
+		[[nodiscard]] explicit async_transformer(propagate_type data_propagate_type, async_type async_type, Fn&& fn)
 			: async_node<Ret, Args...>(data_propagate_type, async_type), fn(std::move(fn)){
 		}
 
-		[[nodiscard]] explicit async_transformer_v2(propagate_type data_propagate_type, async_type async_type, const Fn& fn)
+		[[nodiscard]] explicit async_transformer(propagate_type data_propagate_type, async_type async_type, const Fn& fn)
 			: async_node<Ret, Args...>(data_propagate_type, async_type), fn(fn){
 		}
 
@@ -246,9 +246,9 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename... Args, typename Fn>
 		requires (sizeof...(Args) > 0)
-	[[nodiscard]] auto make_async_transformer(propagate_type data_propagate_type, async_type async_type, Fn&& fn){
-		using return_type = decltype(test_invoke_result_async<std::decay_t<Fn>&, typename descriptor_trait<make_descriptor_t<Args>>::output_type&&...>())::type;
-		return async_transformer_v2<descriptor<return_type>, std::decay_t<Fn>, make_descriptor_t<Args>...>{
+	[[nodiscard]] FORCE_INLINE auto make_async_transformer(propagate_type data_propagate_type, async_type async_type, Fn&& fn){
+		using return_type = test_invoke_result_async_t<std::decay_t<Fn>&, typename descriptor_trait<make_descriptor_t<Args>>::output_type&&...>;
+		return async_transformer<descriptor<return_type>, std::decay_t<Fn>, make_descriptor_t<Args>...>{
 			data_propagate_type, async_type, std::forward<Fn>(fn)
 		};
 	}
@@ -256,20 +256,20 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename... Args, typename Fn>
 		requires (sizeof...(Args) > 0)
-	[[nodiscard]] auto make_async_transformer(propagate_type data_propagate_type, Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_async_transformer(propagate_type data_propagate_type, Fn&& fn){
 		return react_flow::make_async_transformer<Args...>(data_propagate_type, async_type::async_latest, std::forward<Fn>(fn));
 	}
 
 	export
 	template <typename... Args, typename Fn>
 		requires (sizeof...(Args) > 0)
-	[[nodiscard]] auto make_async_transformer(Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_async_transformer(Fn&& fn){
 		return react_flow::make_async_transformer<Args...>(propagate_type::eager, async_type::async_latest, std::forward<Fn>(fn));
 	}
 
 	export
 	template <typename Fn>
-	[[nodiscard]] auto make_async_transformer(propagate_type data_propagate_type, async_type async_type, Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_async_transformer(propagate_type data_propagate_type, async_type async_type, Fn&& fn){
 		using Args = function_traits<std::decay_t<Fn>>::mem_func_args_type;
 
 		static_assert(std::tuple_size_v<Args> > 0);
@@ -287,13 +287,13 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <typename Fn>
-	[[nodiscard]] auto make_async_transformer(propagate_type data_propagate_type, Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_async_transformer(propagate_type data_propagate_type, Fn&& fn){
 		return react_flow::make_async_transformer(data_propagate_type, async_type::async_latest, std::forward<Fn>(fn));
 	}
 
 	export
 	template <typename Fn>
-	[[nodiscard]] auto make_async_transformer(Fn&& fn){
+	[[nodiscard]] FORCE_INLINE auto make_async_transformer(Fn&& fn){
 		return react_flow::make_async_transformer(propagate_type::eager, async_type::async_latest, std::forward<Fn>(fn));
 	}
 

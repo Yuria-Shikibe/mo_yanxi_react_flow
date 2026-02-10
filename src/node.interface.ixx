@@ -14,6 +14,7 @@ module;
 #define THREAD_CHECK
 #endif
 
+#include <mo_yanxi/adapted_attributes.hpp>
 
 export module mo_yanxi.react_flow:node_interface;
 import std;
@@ -131,17 +132,17 @@ namespace mo_yanxi::react_flow{
 	export
 	using raw_node_ptr = node*;
 
+	using push_dispatch_fptr = void(*)(node*, std::size_t, data_carrier_obj&&);
+
 	export
 	struct successor_entry{
 		std::size_t index;
 		node_pointer entity;
+		push_dispatch_fptr push_fp;
 
 		[[nodiscard]] successor_entry() = default;
 
-		[[nodiscard]] successor_entry(const std::size_t index, node& entity)
-			: index(index),
-			entity(entity){
-		}
+		[[nodiscard]] successor_entry(const std::size_t index, node& entity);
 
 		[[nodiscard]] node* get() const noexcept{
 			return entity.get();
@@ -408,16 +409,20 @@ namespace mo_yanxi::react_flow{
 
 #pragma endregion
 
+	public:
+		[[nodiscard]] virtual push_dispatch_fptr get_push_dispatch_fptr() const noexcept {
+			return [] FORCE_INLINE (node* n, std::size_t idx, data_carrier_obj&& data){
+				n->on_push(idx, std::move(data));
+			};
+		}
+
 	protected:
-		/*void push_update(this const auto& self, push_data_obj&& data, data_type_index idx){
-			if(self.data_propagate_type_ == propagate_type::eager){
-				for(const successor_entry& successor : self.get_outputs()){
-					successor.update(std::move(data), idx);
-				}
-			} else{
-				std::ranges::for_each(self.get_outputs(), &successor_entry::mark_updated);
-			}
-		}*/
+		template <typename S>
+		push_dispatch_fptr get_this_class_push_dispatch_fptr(this const S& self) noexcept{
+			return [] FORCE_INLINE (node* n, std::size_t idx, data_carrier_obj&& data){
+				static_cast<S*>(n)->S::on_push(idx, std::move(data));
+			};
+		}
 
 		virtual void on_pulse_received(manager& m){
 			return;
@@ -443,24 +448,6 @@ namespace mo_yanxi::react_flow{
 			std::ranges::for_each(get_outputs(), &successor_entry::mark_updated);
 		}
 
-
-		static bool try_insert(std::vector<successor_entry>& successors, std::size_t slot, node& next){
-			if(std::ranges::find_if(successors, [&](const successor_entry& e){
-				return e.index == slot && e.entity == &next;
-			}) != successors.end()){
-				return false;
-			}
-
-			successors.emplace_back(slot, next);
-			return true;
-		}
-
-		static bool try_erase(std::vector<successor_entry>& successors, const std::size_t slot,
-			const node& next) noexcept{
-			return std::erase_if(successors, [&](const successor_entry& e){
-				return e.index == slot && e.entity == &next;
-			});
-		}
 	};
 
 	/**
@@ -586,13 +573,17 @@ namespace mo_yanxi::react_flow{
 		entity->on_push(index, std::move(data));
 	}
 
+	successor_entry::successor_entry(const std::size_t index, node& entity): index(index),
+		entity(entity), push_fp{entity.get_push_dispatch_fptr()}{
+	}
+
 	void successor_entry::update(data_carrier_obj&& data, data_type_index checker) const{
 #if MO_YANXI_DATA_FLOW_ENABLE_TYPE_CHECK
 		if(entity->get_in_socket_type_index()[index] != checker){
 			throw invalid_node_error{"Type Mismatch on update"};
 		}
 #endif
-		entity->on_push(index, std::move(data));
+		push_fp(entity.get(), index, std::move(data));
 	}
 
 	void successor_entry::mark_updated() const{

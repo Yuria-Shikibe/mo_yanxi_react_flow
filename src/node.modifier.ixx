@@ -7,6 +7,7 @@ export module mo_yanxi.react_flow:modifier;
 
 import :manager;
 import :node_interface;
+import :successory_list;
 
 import mo_yanxi.react_flow.data_storage;
 import mo_yanxi.meta_programming;
@@ -26,6 +27,7 @@ namespace mo_yanxi::react_flow{
 		requires (spec_of_descriptor<Ret> && (spec_of_descriptor<Args> && ...))
 	struct modifier_base : type_aware_node<typename descriptor_trait<Ret>::output_type>{
 	protected:
+		friend node;
 		static constexpr std::size_t argument_count = sizeof...(Args);
 		static_assert(argument_count > 0);
 
@@ -57,7 +59,7 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		std::array<raw_node_ptr, argument_count> parents_{};
-		std::vector<successor_entry> successors_{};
+		successor_list successors_{};
 
 	protected:
 		ADAPTED_NO_UNIQUE_ADDRESS input_descriptors arguments_{};
@@ -105,11 +107,11 @@ namespace mo_yanxi::react_flow{
 			if(auto& ptr = post.get_inputs()[slot]){
 				post.erase_predecessor_single_edge(slot, *ptr);
 			}
-			return node::try_insert(successors_, slot, post);
+			return try_insert(successors_, slot, post);
 		}
 
 		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
-			return node::try_erase(successors_, slot, post);
+			return try_erase(successors_, slot, post);
 		}
 
 		void connect_predecessor_impl(std::size_t slot, node& prev) final{
@@ -130,6 +132,7 @@ namespace mo_yanxi::react_flow{
 #pragma endregion
 
 	public:
+
 		[[nodiscard]] data_state get_data_state() const noexcept override{
 			if constexpr(descriptor_trait<Ret>::cached){
 				return *data_state_;
@@ -144,7 +147,11 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
+		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr() const noexcept override{
+			return static_cast<const Impl*>(this)->get_this_class_push_dispatch_fptr();
+		}
 	protected:
+
 		auto get_cache() requires(descriptor_trait<Ret>::cached){
 			return ret_descriptor_.get();
 		}
@@ -393,34 +400,67 @@ namespace mo_yanxi::react_flow{
 	template <typename Ret, typename Fn, typename... Args>
 		requires (std::is_invocable_r_v<typename descriptor_trait<Ret>::input_pass_type, Fn, typename descriptor_trait<
 			Args>::operator_pass_type...> && spec_of_descriptor<Ret> && (spec_of_descriptor<Args> && ...))
-	struct transformer final : modifier<Ret, Args...>{
+	struct transformer final : modifier_base<transformer<Ret, Fn, Args...>, Ret, Args...>{
 	private:
+		using base = modifier_base<transformer, Ret, Args...>;
+		friend base;
+
 		ADAPTED_NO_UNIQUE_ADDRESS Fn fn;
 
-	protected:
-		modifier<Ret, Args...>::return_pass_type operator(
-		)(descriptor_trait<Args>::operator_pass_type... args) override final{
-			return std::invoke(fn, args...);
-		}
-
 	public:
-		explicit transformer(propagate_type data_propagate_type)
-			: modifier<Ret, Args...>(data_propagate_type){
+		[[nodiscard]] transformer() = default;
+
+		[[nodiscard]] explicit transformer(propagate_type data_propagate_type)
+			: base(data_propagate_type){
 		}
 
-		transformer() = default;
+		[[nodiscard]] transformer(propagate_type data_propagate_type, Fn&& fn)
+			: base(data_propagate_type),
+			fn(std::move(fn)){
+		}
 
-		transformer(propagate_type data_propagate_type, const Fn& fn)
-			: modifier<Ret, Args...>(data_propagate_type),
+		[[nodiscard]] transformer(propagate_type data_propagate_type, const Fn& fn)
+			: base(data_propagate_type),
 			fn(fn){
 		}
 
-		explicit transformer(const Fn& fn)
+		[[nodiscard]] explicit transformer(const Fn& fn)
 			: fn(fn){
 		}
 
-		explicit transformer(Fn&& fn)
+		[[nodiscard]] explicit transformer(Fn&& fn)
 			: fn(std::move(fn)){
+		}
+
+		[[nodiscard]] request_pass_handle<typename base::return_output_type> request_raw(bool allow_expired) override{
+			if constexpr(descriptor_trait<Ret>::cached){
+				auto state = this->get_data_state();
+				if(state == data_state::fresh || (state == data_state::expired && allow_expired)){
+					return react_flow::make_request_handle_expected_from_data_storage(this->get_cache(),
+						state == data_state::expired);
+				}
+			}
+
+			auto [arguments, state, success] = this->template load_arguments<true>(trigger_type::active, allow_expired,
+				nullptr);
+
+			if(success){
+				return react_flow::make_request_handle_expected_from_data_storage(
+					this->ret_descriptor_ << this->apply(arguments), state == data_state::expired);
+			} else{
+				return make_request_handle_unexpected<typename base::return_output_type>(data_state::failed);
+			}
+		}
+
+	private:
+		void apply_arguments(typename base::argument_pass_type& args){
+			this->store_result(this->apply(args));
+		}
+
+		typename base::return_pass_type apply(base::argument_pass_type& arguments){
+			return [&, this]<std::size_t... Idx>(std::index_sequence<Idx...>){
+				return std::invoke(fn, react_flow::pass_data(std::get<Idx>(arguments))...);
+			}(std::index_sequence_for<Args...>());
 		}
 	};
 

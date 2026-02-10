@@ -16,6 +16,15 @@ void modifier_test(){
 
 	auto& num_input = manager.add_node<provider_general<std::string>>();
 
+	auto node = make_transformer<descriptor<std::string, {true}, std::string_view>>([](std::string_view input) -> std::optional<int> {
+		int v;
+		if(const auto [ptr, ec] = std::from_chars(input.data(), input.data() + input.size(), v); ec == std::errc{}){
+			return v;
+		}
+
+		return std::nullopt;
+	});
+
 	auto& stoi = manager.add_node(make_transformer<descriptor<std::string, {true}, std::string_view>>([](std::string_view input) -> std::optional<int> {
 		int v;
 		if(const auto [ptr, ec] = std::from_chars(input.data(), input.data() + input.size(), v); ec == std::errc{}){
