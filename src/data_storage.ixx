@@ -5,16 +5,31 @@ module;
 #include <mo_yanxi/adapted_attributes.hpp>
 
 
-export module mo_yanxi.react_flow.data_storage;
+export module mo_yanxi.react_flow.util;
 
 import mo_yanxi.meta_programming;
 import std;
 
 namespace mo_yanxi::react_flow{
 	export enum struct data_state : std::uint8_t{
+		/**
+		 * @brief data in good state.
+		 */
 		fresh,
+
+		/**
+		 * @brief may contains data, but expired.
+		 */
 		expired,
+
+		/**
+		 * @brief the push is on the flight.
+		 */
 		awaiting,
+
+		/**
+		 * @brief unable to get any available data under current restriction.
+		 */
 		failed
 	};
 
@@ -36,14 +51,37 @@ namespace mo_yanxi::react_flow{
 	};
 
 	export enum struct trigger_type : std::uint8_t{
+
+		/**
+		 * @brief normal mode, has no effect
+		 */
+		active,
+
+		/**
+		 * @brief disable the node push functionality
+		 */
 		disabled,
-		on_pulse,
-		active
+
+		/**
+		 * @brief allow only one push, then set to disabled
+		 */
+		once,
 	};
 
 	export enum struct propagate_type : std::uint8_t{
+		/**
+		 * @brief Updates are pushed immediately to successors
+		 */
 		eager,
+
+		/**
+		 * @brief Updates are marked, but data is only computed/fetched when a node requests it.
+		 */
 		lazy,
+
+		/**
+		 * @brief Updates are synchronized with a "pulse" signal (e.g., a clock tick).
+		 */
 		pulse
 	};
 
@@ -53,20 +91,9 @@ namespace mo_yanxi::react_flow{
 		waiting_pulse
 	};
 
-
-
-
-	template <std::ranges::input_range Rng>
-		requires (std::is_scoped_enum_v<std::ranges::range_value_t<Rng>>)
-	std::ranges::range_value_t<Rng> merge_data_state(const Rng& states) noexcept{
-		return std::ranges::max(states, std::ranges::less{}, [](const auto v){
-			return std::to_underlying(v);
-		});
-	}
-
 	export
 	template <typename T>
-	void update_state_enum(T& state, T other) noexcept{
+	constexpr void update_state_enum(T& state, T other) noexcept{
 		state = T{std::max(std::to_underlying(state), std::to_underlying(other))};
 	}
 
@@ -317,9 +344,10 @@ namespace mo_yanxi::react_flow{
 			return lhs.state() == rhs;
 		}
 	};
-}
 
-namespace mo_yanxi::react_flow{
+	/**
+	 * @brief opaque type, work like void* (type erasure).
+	 */
 	export
 	struct data_carrier_obj;
 
@@ -327,10 +355,6 @@ namespace mo_yanxi::react_flow{
 	template <typename T>
 	class data_carrier;
 
-	// -----------------------------------------------------------------------------
-	// 特化版本 1: 当 T 不是平凡可复制类型 (Non-Trivially Copyable)
-	// 使用 variant<monostate, const T*, T>
-	// -----------------------------------------------------------------------------
 	template <typename T>
 		requires (!std::is_trivially_copyable_v<T>)
 	class data_carrier<T>{
@@ -340,18 +364,14 @@ namespace mo_yanxi::react_flow{
 		using value_type = T;
 		static constexpr bool is_trivial = false;
 
-		// 构造函数：默认初始化 (monostate)
 		constexpr data_carrier() = default;
 
-		// 构造函数：直接移动传入 T
 		constexpr explicit(false) data_carrier(T&& val) : storage_(std::move(val)){
 		}
 
-		// 构造函数：传入 const T*
 		constexpr explicit(false) data_carrier(const T& ptr) : storage_(&ptr){
 		}
 
-		// 移动构造和赋值
 		constexpr data_carrier(data_carrier&& other) noexcept(std::is_nothrow_move_constructible_v<T>) requires(std::is_move_constructible_v<T>) : storage_(std::exchange(other.storage_, std::monostate{})){}
 		constexpr data_carrier& operator=(data_carrier&& other) noexcept(std::is_nothrow_move_assignable_v<T>) requires(std::is_move_assignable_v<T>){
 			storage_ = std::exchange(other.storage_, std::monostate{});
@@ -360,7 +380,6 @@ namespace mo_yanxi::react_flow{
 
 		constexpr data_carrier(const data_carrier&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
 		constexpr data_carrier& operator=(const data_carrier&) noexcept(std::is_nothrow_copy_constructible_v<T>) requires(std::is_copy_constructible_v<T>) = default;
-
 
 		constexpr const T* get_view() const noexcept{
 			return std::visit<const T*>([]<typename Ty>(const Ty& input){
@@ -440,17 +459,13 @@ namespace mo_yanxi::react_flow{
 		variant_t storage_{};
 	};
 
-	// -----------------------------------------------------------------------------
-	// 特化版本 2: 当 T 是平凡可复制类型 (Trivially Copyable)
-	// 直接持有 T，不使用 Variant
-	// -----------------------------------------------------------------------------
 	template <typename T>
 		requires std::is_trivially_copyable_v<T> && std::is_object_v<T>
 	class data_carrier<T>{
 	public:
 		using value_type = T;
 		static constexpr bool is_trivial = true;
-		// 构造函数：值初始化
+
 		constexpr data_carrier() : value_{}{
 		}
 
@@ -518,8 +533,8 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename T>
 		requires (data_carrier<T>::is_trivial && sizeof(T) > sizeof(void*) * 2)
-	constexpr data_pass_t<T> pass_data(data_carrier<T>& input) noexcept {
-		return input.get();
+	constexpr const data_pass_t<T>& pass_data(data_carrier<T>& input) noexcept {
+		return input.get_ref_view();
 	}
 
 	export

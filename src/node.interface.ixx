@@ -20,7 +20,7 @@ export module mo_yanxi.react_flow:node_interface;
 import std;
 
 import mo_yanxi.type_register;
-export import mo_yanxi.react_flow.data_storage;
+export import mo_yanxi.react_flow.util;
 
 namespace mo_yanxi::react_flow{
 	using data_type_index = type_identity_index;

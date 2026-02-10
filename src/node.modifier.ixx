@@ -9,7 +9,7 @@ import :manager;
 import :node_interface;
 import :successory_list;
 
-import mo_yanxi.react_flow.data_storage;
+import mo_yanxi.react_flow.util;
 import mo_yanxi.meta_programming;
 import mo_yanxi.concepts;
 import std;
@@ -169,7 +169,7 @@ namespace mo_yanxi::react_flow{
 					switch(trigger_type& trigger = *std::get<trigger_index>(arguments_)){
 					case trigger_type::active : return true;
 					case trigger_type::disabled : return false;
-					case trigger_type::on_pulse : trigger = trigger_type::disabled;
+					case trigger_type::once : trigger = trigger_type::disabled;
 						return true;
 					default : std::unreachable();
 					}
@@ -230,7 +230,7 @@ namespace mo_yanxi::react_flow{
 					using DescriptorTy = std::tuple_element_t<trigger_index, input_descriptors>;
 					if(descriptor_trait<DescriptorTy>::cached && descriptor_trait<DescriptorTy>::identity){
 						std::get<trigger_index>(arguments_).set(
-							rst == trigger_type::on_pulse ? trigger_type::disabled : rst);
+							rst == trigger_type::once ? trigger_type::disabled : rst);
 						expired_flags_.template set<trigger_index>();
 					}
 					if(rst == trigger_type::disabled) return;

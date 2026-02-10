@@ -51,7 +51,7 @@ TEST(MultithreadingTest, MultipleThreads) {
     std::vector<std::jthread> threads;
     threads.reserve(num_threads);
     for(int i = 0; i < num_threads; ++i) {
-        threads.emplace_back([&, i]{
+        threads.emplace_back([&]{
             mgr.push_posted_act([&]{
                 p.update_value(1);
             });
