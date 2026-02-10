@@ -142,7 +142,6 @@ namespace mo_yanxi::react_flow{
 			return mo_yanxi::back_redundant_construct<node_pointer, 1>(std::in_place_type<T>, *this,
 				std::forward<Args>(args)...);
 		}
-
 		void process_node(node& node){
 			node.set_manager(*this);
 			if(node.get_propagate_type() == propagate_type::pulse){

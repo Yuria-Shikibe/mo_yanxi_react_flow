@@ -3,11 +3,18 @@ set_encodings("utf-8")
 set_project("mo_yanxi.react_flow")
 set_version("1.0")
 
+
+
 -- print(get_config("toolchain"))
 
 option("add_test")
     set_default(false)
     set_description("Add google test target")
+option_end()
+
+option("add_benchmark")
+    set_default(false)
+    set_description("Add add_benchmark target")
 option_end()
 
 option("use_libcxx")
@@ -51,6 +58,11 @@ add_requires(pkg_name)
 if has_config("add_test") then
     add_requires("gtest")
 end
+if has_config("add_benchmark") then
+    add_requires("benchmark")
+end
+
+
 
 if (get_config("toolchain") ~= "msvc") and has_config("use_libcxx") then
     add_requireconfs("*", {configs = {cxflags = "-stdlib=libc++", ldflags = {"-stdlib=libc++", "-lc++abi", "-lunwind"}}})
@@ -86,8 +98,6 @@ target("mo_yanxi.react_flow")
     set_warnings("pedantic")
 target_end()
 
-if has_config("add_test") then
-
 target("mo_yanxi.react_flow.test")
     set_kind("binary")
     set_languages("c++23")
@@ -99,9 +109,10 @@ target("mo_yanxi.react_flow.test")
     add_deps("mo_yanxi.react_flow", {public = true})
     add_packages("gtest")
     add_files("test/**.cpp")
+
+    set_enabled(has_config("add_test"))
 target_end()
 
-end
 
 
 target("mo_yanxi.react_flow.example")
@@ -111,10 +122,37 @@ target("mo_yanxi.react_flow.example")
     set_warnings("all")
     set_warnings("pedantic")
 
+
+    set_optimize("fastest")
+    set_symbols("debug")
+    set_strip("debug")
+
     add_deps("mo_yanxi.react_flow", {public = true})
     add_files("examples/**.cpp")
     add_files("examples/**.ixx")
+
     set_default(false)
+target_end()
+
+target("mo_yanxi.react_flow.benchmark")
+    set_kind("binary")
+    set_languages("c++23")
+    set_policy("build.c++.modules", true)
+    set_warnings("all")
+    set_warnings("pedantic")
+
+
+    set_optimize("fastest")
+    set_symbols("debug")
+    set_strip("debug")
+
+    add_packages("benchmark")
+
+    add_deps("mo_yanxi.react_flow", {public = true})
+    add_files("benchmark/**.cpp")
+
+    set_default(false)
+    set_enabled(has_config("add_benchmark"))
 target_end()
 
 includes("xmake2cmake.lua");

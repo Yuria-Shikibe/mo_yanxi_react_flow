@@ -7,6 +7,7 @@ export module mo_yanxi.react_flow;
 export import :node_interface;
 export import :endpoint;
 export import :async;
+export import :successory_list;
 export import :modifier;
 
 export import :manager;
