@@ -100,7 +100,5 @@ void simple_io_async_example(){
 
 
 int main(){
-	modifier_test();
-
-	// simple_io_async_example();
+	simple_io_async_example();
 }

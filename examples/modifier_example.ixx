@@ -10,7 +10,6 @@ import mo_yanxi.utility;
 import std;
 
 
-volatile int val;
 
 export
 void modifier_test(){
@@ -44,42 +43,39 @@ void modifier_test(){
 
 	auto& listener = manager.add_node(make_listener([](std::optional<int> input){
 		if(input){
-			val = input.value();
+			std::println(std::cout, "!Push: input * 2 = {}", *input);
 		}else{
-			val = -1;
+			std::println(std::cout, "!Push: nullopt");
 		}
+		std::cout.flush();
 	}));
 
 	connect_chain({&num_input, &stoi, &mul2, &listener});
 
 	auto fetch = [&]{
 		if(auto v = listener.request(false).value()){
-			val = v.value();
+			std::println("!Fetch: {}", *v);
 		}else{
-			val = -1;
+			std::println("!Fetch: nullopt");
 		}
 
 	};
 
 
-	for(int i = 0; i < 1000000; ++i){
-		num_input.update_value("123");
-		num_input.update_value("651207");
+	num_input.update_value("123");
+	num_input.update_value("651207");
 
-		fetch();
+	fetch();
 
-		num_input.update_value("abc");
-		num_input.update_value("1111111111111111111111111");
+	num_input.update_value("abc");
+	num_input.update_value("1111111111111111111111111");
 
-		fetch();
+	fetch();
 
-		stoi.set_propagate_type(propagate_type::lazy);
-		num_input.update_value("555");
+	stoi.set_propagate_type(propagate_type::lazy);
+	num_input.update_value("555");
 
-		fetch();
-
-		val = i;
-	}
+	fetch();
 
 /*
 Expected:

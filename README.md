@@ -4,6 +4,8 @@
 
 ![sample.drawio.svg](properties/sample.drawio.svg)
 
+### [Check code example similar to the sketch map](examples/example.cpp)
+
 ## Benchmark
 > Input: Small String -> Transform: (`std::from_chars`->`std::optional<int>`) -> Output
 
@@ -22,7 +24,11 @@ Node Graph Implementation: provider -> transformer -> listener
 
 Overhead on three node is about **50ns** (29% on this _stoi_ task)
 
-### [Check the similar code example here](examples/example.cpp)
+## Dependency:
+* **C++23** supported compiler and standard library.
+* [_Utility_](https://github.com/Yuria-Shikibe/mo_yanxi_utility.git), basically meta programming thing and little concurrent facility.
+* [_Xmake_](https://xmake.io) is used as the build system.
+* _gtest_ and _benchmark_, not auto included when install the library.
 
 ## Supports/Feature
 * Supports eager(push), lazy(fetch) and pulse(clock) mode.
