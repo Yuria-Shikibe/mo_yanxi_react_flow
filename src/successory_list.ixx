@@ -39,7 +39,7 @@ namespace mo_yanxi::react_flow{
 
 
 	public:
-		successor_list() noexcept : using_heap_(false), size_(0) {
+		successor_list() noexcept {
 			std::construct_at(&storage_.stack);
 		}
 

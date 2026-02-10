@@ -700,7 +700,7 @@ namespace mo_yanxi::react_flow{
 		static constexpr descriptor_tag tag = Tag;
 
 		//TODO check std::ref/const_ref?
-		static_assert(!(std::ranges::view<OutputType> && !tag.cache), "view from input must have it cached, or it will casue dangling");
+		static_assert(!(std::ranges::view<OutputType> && !tag.cache), "view from input must have it cached, or it will cause dangling");
 		static_assert(std::convertible_to<std::invoke_result_t<convertor_type, data_carrier<input_type>&&>, data_carrier<output_type>>);
 		static_assert(std::is_object_v<InputType>);
 

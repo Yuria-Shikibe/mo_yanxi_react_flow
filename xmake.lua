@@ -177,4 +177,6 @@ target("mo_yanxi.react_flow.benchmark")
     add_files("benchmark/**.cpp")
 target_end()
 
+if os.isfile("./xmake2cmake.lua") then
 includes("xmake2cmake.lua")
+end
