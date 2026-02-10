@@ -139,8 +139,9 @@ namespace mo_yanxi::react_flow{
 
 		template <std::derived_from<node> T, typename... Args>
 		[[nodiscard]] node_pointer make_node(Args&&... args){
-			return mo_yanxi::back_redundant_construct<node_pointer, 1>(std::in_place_type<T>, *this,
-				std::forward<Args>(args)...);
+			return node_pointer{std::in_place_type<T>, std::forward<Args>(args)...};
+			// return mo_yanxi::back_redundant_construct<node_pointer, 1>(std::in_place_type<T>, *this,
+			// 	std::forward<Args>(args)...);
 		}
 		void process_node(node& node){
 			node.set_manager(*this);

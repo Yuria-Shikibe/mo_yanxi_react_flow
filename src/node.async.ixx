@@ -14,7 +14,6 @@ import mo_yanxi.meta_programming;
 import std;
 
 namespace mo_yanxi::react_flow{
-
 	export struct async_context{
 		std::stop_token node_stop_token{};
 		std::stop_token manager_stop_token{};
@@ -34,8 +33,9 @@ namespace mo_yanxi::react_flow{
 	template <typename Ret, typename... Args>
 		requires (spec_of_descriptor<Ret> && (spec_of_descriptor<Args> && ...))
 	struct async_node : modifier_base<async_node<Ret, Args...>, Ret, Args...>{
-	private:
 		using base = modifier_base<async_node, Ret, Args...>;
+
+	private:
 		friend base;
 
 		using decay_argument_type = std::tuple<typename descriptor_trait<Args>::output_type...>;
@@ -63,6 +63,11 @@ namespace mo_yanxi::react_flow{
 		[[nodiscard]] explicit async_node(propagate_type data_propagate_type, async_type async_type)
 			: base(data_propagate_type), async_type_(async_type){
 		}
+
+		async_node(const async_node& other) = delete;
+		async_node(async_node&& other) noexcept = default;
+		async_node& operator=(const async_node& other) = delete;
+		async_node& operator=(async_node&& other) noexcept = default;
 
 #pragma region Async_Settings
 
@@ -229,6 +234,11 @@ namespace mo_yanxi::react_flow{
 		[[nodiscard]] explicit async_transformer(propagate_type data_propagate_type, async_type async_type, const Fn& fn)
 			: async_node<Ret, Args...>(data_propagate_type, async_type), fn(fn){
 		}
+
+		async_transformer(const async_transformer& other) = delete;
+		async_transformer(async_transformer&& other) noexcept = default;
+		async_transformer& operator=(const async_transformer& other) = delete;
+		async_transformer& operator=(async_transformer&& other) noexcept = default;
 
 	protected:
 

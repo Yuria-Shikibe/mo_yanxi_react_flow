@@ -9,7 +9,6 @@ import :node_interface;
 
 
 namespace mo_yanxi::react_flow{
-	// export using successor_list = std::vector<successor_entry>;
 
 	export struct successor_list {
 		static constexpr std::size_t sso_count = 2;
@@ -55,6 +54,9 @@ namespace mo_yanxi::react_flow{
 				std::destroy_at(&storage_.stack);
 			}
 		}
+
+		successor_list(const successor_list& other) = delete;
+		successor_list& operator=(const successor_list& other) = delete;
 
 		// Move Constructor
 		successor_list(successor_list&& other) noexcept : using_heap_(other.using_heap_), size_(other.size_) {

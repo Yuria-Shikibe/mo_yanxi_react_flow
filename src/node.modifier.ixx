@@ -73,6 +73,11 @@ namespace mo_yanxi::react_flow{
 #pragma region Connection_Region
 
 	public:
+		modifier_base(const modifier_base& other) = delete;
+		modifier_base(modifier_base&& other) noexcept = default;
+		modifier_base& operator=(const modifier_base& other) = delete;
+		modifier_base& operator=(modifier_base&& other) noexcept = default;
+
 		[[nodiscard]] bool is_isolated() const noexcept final{
 			return std::ranges::none_of(parents_, std::identity{}) && successors_.empty();
 		}

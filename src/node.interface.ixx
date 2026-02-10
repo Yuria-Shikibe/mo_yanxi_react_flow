@@ -463,6 +463,11 @@ namespace mo_yanxi::react_flow{
 			node.disconnect_self_from_context();
 		}
 
+		node_holder(const node_holder& other) = delete;
+		node_holder(node_holder&& other) noexcept = default;
+		node_holder& operator=(const node_holder& other) = delete;
+		node_holder& operator=(node_holder&& other) noexcept = default;
+
 		node_holder() = default;
 
 		template <typename ...Args>
