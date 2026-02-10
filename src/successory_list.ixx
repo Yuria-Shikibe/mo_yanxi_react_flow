@@ -1,6 +1,6 @@
-//
-// Created by Matrix on 2026/2/10.
-//
+module;
+
+#include <mo_yanxi/adapted_attributes.hpp>
 
 export module mo_yanxi.react_flow:successory_list;
 
@@ -20,13 +20,10 @@ namespace mo_yanxi::react_flow{
 		using pointer = value_type*;
 		using const_pointer = const value_type*;
 
-		// Iterators defined as raw pointers for zero-overhead
 		using iterator = value_type*;
 		using const_iterator = const value_type*;
 
 	private:
-		bool using_heap_ = false;
-		size_type size_ = 0;
 
 		union storage_t {
 			std::array<value_type, sso_count> stack;
@@ -37,12 +34,11 @@ namespace mo_yanxi::react_flow{
 		};
 
 		storage_t storage_;
+		size_type size_ = 0;
+		bool using_heap_ = false;
+
 
 	public:
-		// ------------------------------------------------------------------------
-		// Constructors & Destructor
-		// ------------------------------------------------------------------------
-
 		successor_list() noexcept : using_heap_(false), size_(0) {
 			std::construct_at(&storage_.stack);
 		}
@@ -58,7 +54,6 @@ namespace mo_yanxi::react_flow{
 		successor_list(const successor_list& other) = delete;
 		successor_list& operator=(const successor_list& other) = delete;
 
-		// Move Constructor
 		successor_list(successor_list&& other) noexcept : using_heap_(other.using_heap_), size_(other.size_) {
 			if (other.using_heap_) {
 				std::construct_at(&storage_.heap, std::move(other.storage_.heap));
@@ -71,48 +66,31 @@ namespace mo_yanxi::react_flow{
 			other.size_ = 0;
 		}
 
-		// ------------------------------------------------------------------------
-		// Move Assignment Operator (Added)
-		// ------------------------------------------------------------------------
 		successor_list& operator=(successor_list&& other) noexcept {
 			if (this == &other) return *this;
 
-			// 1. 析构当前活跃成员 (Teardown current state)
-			//    在 union 中切换活跃成员最安全的方法是先销毁旧的
 			if (using_heap_) {
 				std::destroy_at(&storage_.heap);
 			} else {
 				std::destroy_at(&storage_.stack);
 			}
 
-			// 2. 复制元数据 (Copy metadata)
 			using_heap_ = other.using_heap_;
 			size_ = other.size_;
 
-			// 3. 构造新状态 (Construct new state from other)
 			if (using_heap_) {
-				// Case: Heap Mode
-				// 使用 std::vector 的移动构造接管资源
 				std::construct_at(&storage_.heap, std::move(other.storage_.heap));
 			} else {
-				// Case: Stack Mode
-				// 构造 array 并逐个移动元素
 				std::construct_at(&storage_.stack);
 				for (size_type i = 0; i < size_; ++i) {
 					storage_.stack[i] = std::move(other.storage_.stack[i]);
 				}
 			}
 
-			// 4. 重置源对象 (Reset source)
 			other.size_ = 0;
-			// 注意：other.using_heap_ 保持不变，other 仍处于有效状态（只是空了）
 
 			return *this;
 		}
-
-		// ------------------------------------------------------------------------
-		// Iterator Interface
-		// ------------------------------------------------------------------------
 
 		[[nodiscard]] iterator begin() noexcept {
 			if (using_heap_) return storage_.heap.data();
@@ -131,10 +109,6 @@ namespace mo_yanxi::react_flow{
 		[[nodiscard]] const_iterator end() const noexcept {
 			return begin() + size_;
 		}
-
-		// ------------------------------------------------------------------------
-		// Capacity & Modifiers
-		// ------------------------------------------------------------------------
 
 		[[nodiscard]] bool empty() const noexcept {
 			return size_ == 0;
@@ -165,8 +139,6 @@ namespace mo_yanxi::react_flow{
 			} else {
 				if (size_ < sso_count) {
 					reference val = storage_.stack[size_];
-					// Use assignment since array is already default constructed
-					// For stricter C++20 conformance with non-trivial types, consider construct_at
 					val = value_type(std::forward<Args>(args)...);
 					size_++;
 					return storage_.stack[size_ - 1];
@@ -190,7 +162,7 @@ namespace mo_yanxi::react_flow{
 		// Global Friend: Swap-and-Pop Erase
 		// ------------------------------------------------------------------------
 		template <typename Pred>
-		friend size_type erase_if(successor_list& c, Pred pred) {
+		friend size_type erase_if(successor_list& c, Pred pred) noexcept {
 			size_type removed_count = 0;
 			pointer p_begin = c.begin();
 
@@ -222,8 +194,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 	private:
-		// No-inline to optimize hot path in emplace_back
-		void switch_to_heap() {
+		NO_INLINE void switch_to_heap() {
 			std::vector<value_type> new_heap;
 			new_heap.reserve(sso_count + 1);
 

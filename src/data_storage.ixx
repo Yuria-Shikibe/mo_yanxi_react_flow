@@ -541,31 +541,29 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <typename T>
-	data_carrier<T>& push_data_cast(data_carrier_obj& obj) noexcept{
+	data_carrier<T>& data_carrier_cast(data_carrier_obj& obj) noexcept{
 		return reinterpret_cast<data_carrier<T>&>(obj);
 	}
 
 	export
 	template <typename T>
-	const data_carrier<T>& push_data_cast(const data_carrier_obj& obj) noexcept{
+	const data_carrier<T>& data_carrier_cast(const data_carrier_obj& obj) noexcept{
 		return reinterpret_cast<const data_carrier<T>&>(obj);
 	}
 
 	export
 	template <typename T>
-	data_carrier<T>&& push_data_cast(data_carrier_obj&& obj) noexcept{
+	data_carrier<T>&& data_carrier_cast(data_carrier_obj&& obj) noexcept{
 		return reinterpret_cast<data_carrier<T>&&>(obj);
 	}
 
 	export
 	template <typename T>
-	const data_carrier<T>&& push_data_cast(const data_carrier_obj&& obj) noexcept{
+	const data_carrier<T>&& data_carrier_cast(const data_carrier_obj&& obj) noexcept{
 		return reinterpret_cast<const data_carrier<T>&&>(obj);
 	}
 
 
-
-	//TODO return both data and state
 	export
 	template <typename T>
 	using request_pass_handle = request_result<data_carrier<T>>;
@@ -708,10 +706,6 @@ namespace mo_yanxi::react_flow{
 			return std::invoke(transformer, data_carrier{*value});
 		}
 
-		// FORCE_INLINE constexpr data_carrier<output_type> get(data_carrier<input_type>& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
-		// 	return std::invoke(transformer, pushed);
-		// }
-
 
 		FORCE_INLINE constexpr data_carrier<output_type> get(data_carrier<input_type>&& pushed) const noexcept(std::is_nothrow_invocable_r_v<output_type, const convertor_type&, input_type>){
 			return std::invoke(transformer, std::move(pushed));
@@ -778,21 +772,6 @@ namespace mo_yanxi::react_flow{
 		static constexpr bool no_push = tag.quiet;
 	};
 
-	/*
-	template <typename ...Args>
-		requires (spec_of_descriptor<Args> && ...)
-	struct argument_descriptor{
-		using args_descriptor_tuple = std::tuple<Args...>;
-		static constexpr std::size_t cached_count = (static_cast<std::size_t>(descriptor_trait<Args>::cached) + ... + 0);
-
-		args_descriptor_tuple arguments_;
-		ADAPTED_NO_UNIQUE_ADDRESS std::bitset<cached_count> dirty_flags_;
-
-		bool is_dirty() const noexcept{
-			return dirty_flags_.any();
-		}
-	};*/
-
 	template <std::size_t N>
 	consteval std::array<smallest_uint_t<N>, N> make_index_array(const bool(& input)[N]){
 		smallest_uint_t<N> sz{};
@@ -810,7 +789,7 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <bool... cache_bit>
-	struct dirty_bits{
+	struct expire_flags{
 		static constexpr std::size_t total_bits = sizeof...(cache_bit);
 		static constexpr std::array<smallest_uint_t<total_bits>, total_bits> indices{react_flow::make_index_array({cache_bit...})};
 		static constexpr std::size_t cached_count = (static_cast<std::size_t>(cache_bit) + ... + 0uz);

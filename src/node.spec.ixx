@@ -88,7 +88,7 @@ namespace mo_yanxi::react_flow{
 
 		void on_push(std::size_t target_index, data_carrier_obj&& in_data) override{
 			assert(target_index == 0);
-			react_flow::push_to_successors(successors, push_data_cast<T>(std::move(in_data)));
+			react_flow::push_to_successors(successors, data_carrier_cast<T>(std::move(in_data)));
 		}
 	};
 
@@ -191,7 +191,7 @@ namespace mo_yanxi::react_flow{
 		void on_push(const std::size_t from_index, data_carrier_obj&& in_data) override{
 			assert(from_index == 0);
 			this->data_pending_state_ = data_pending_state::done;
-			auto& storage = push_data_cast<T>(in_data);
+			auto& storage = data_carrier_cast<T>(in_data);
 			this->on_update(storage);
 		}
 
@@ -245,7 +245,7 @@ namespace mo_yanxi::react_flow{
 			switch(this->data_propagate_type_){
 			case propagate_type::eager : this->data_pending_state_ = data_pending_state::done;
 				{
-					auto& storage = push_data_cast<T>(in_data);
+					auto& storage = data_carrier_cast<T>(in_data);
 					cache_ = storage.get();
 
 
@@ -258,7 +258,7 @@ namespace mo_yanxi::react_flow{
 				break;
 			case propagate_type::pulse : this->data_pending_state_ = data_pending_state::waiting_pulse;
 				{
-					auto& storage = push_data_cast<T>(in_data);
+					auto& storage = data_carrier_cast<T>(in_data);
 					cache_ = storage.get();
 				}
 				break;
@@ -329,7 +329,7 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 		void on_push(std::size_t, data_carrier_obj&& in_data) override{
-			auto& storage = push_data_cast<T>(in_data);
+			auto& storage = data_carrier_cast<T>(in_data);
 			data_ = storage.get();
 			on_update();
 		}

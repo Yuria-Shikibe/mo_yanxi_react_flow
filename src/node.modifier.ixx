@@ -64,7 +64,7 @@ namespace mo_yanxi::react_flow{
 	protected:
 		ADAPTED_NO_UNIQUE_ADDRESS input_descriptors arguments_{};
 		ADAPTED_NO_UNIQUE_ADDRESS return_descriptor ret_descriptor_{};
-		ADAPTED_NO_UNIQUE_ADDRESS dirty_bits<descriptor_trait<Args>::cached...> expired_flags_{};
+		ADAPTED_NO_UNIQUE_ADDRESS expire_flags<descriptor_trait<Args>::cached...> expired_flags_{};
 		ADAPTED_NO_UNIQUE_ADDRESS optional_val<data_state, descriptor_trait<Ret>::cached> data_state_{};
 
 	public:
@@ -204,7 +204,7 @@ namespace mo_yanxi::react_flow{
 						if constexpr(!descriptor_trait<Ty>::cached) return false;
 						else if(I == target_index){
 							using InputTy = typename descriptor_trait<Ty>::input_type;
-							std::get<I>(arguments_).set(push_data_cast<InputTy>(in_data));
+							std::get<I>(arguments_).set(data_carrier_cast<InputTy>(in_data));
 							expired_flags_.template set<I>(false);
 							return true;
 						}
@@ -226,7 +226,7 @@ namespace mo_yanxi::react_flow{
 				requires trigger_index < std::tuple_size_v<input_descriptors>; /*workaround for msvc*/
 			}){
 				if(target_index == trigger_index){
-					auto rst = push_data_cast<trigger_type>(in_data).get();
+					auto rst = data_carrier_cast<trigger_type>(in_data).get();
 					using DescriptorTy = std::tuple_element_t<trigger_index, input_descriptors>;
 					if(descriptor_trait<DescriptorTy>::cached && descriptor_trait<DescriptorTy>::identity){
 						std::get<trigger_index>(arguments_).set(
@@ -249,7 +249,7 @@ namespace mo_yanxi::react_flow{
 					if(I == target_index){
 						using Ty = std::tuple_element_t<I, input_descriptors>;
 						using InputTy = typename descriptor_trait<Ty>::input_type;
-						std::get<I>(arguments) = std::get<I>(arguments_) << std::move(push_data_cast<InputTy>(in_data));
+						std::get<I>(arguments) = std::get<I>(arguments_) << std::move(data_carrier_cast<InputTy>(in_data));
 						if constexpr(descriptor_trait<Ty>::cached) expired_flags_.template set<I>(false);
 						return true;
 					}
