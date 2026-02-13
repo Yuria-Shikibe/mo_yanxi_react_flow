@@ -14,14 +14,8 @@ Node Graph Implementation: provider -> transformer -> listener
 
 | Benchmark  | Input Size | Time (ns) | CPU (ns) | Iterations |
 |------------|------------|-----------|----------|------------|
-| **Node**   | 1024       | 195       | 193      | 3733333    |
-| **Node**   | 4096       | 177       | 180      | 4072727    |
-| **Node**   | 32768      | 172       | 173      | 4072727    |
-| **Node**   | 65536      | 179       | 180      | 4072727    |
-| **Native** | 1024       | 131       | 131      | 5600000    |
-| **Native** | 4096       | 128       | 128      | 5600000    |
-| **Native** | 32768      | 122       | 122      | 4977778    |
-| **Native** | 65536      | 130       | 131      | 5600000    |
+| **Node**   | 8          | 179       | 180      | 4072727    |
+| **Native** | 8          | 130       | 131      | 5600000    |
 
 Overhead on three node is about **50ns** (29% on this _stoi_ task)
 

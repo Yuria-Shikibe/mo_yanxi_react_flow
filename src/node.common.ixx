@@ -131,7 +131,7 @@ struct listener : terminal<Arg>{
 	}
 
 protected:
-	void on_update(data_carrier<Arg>& data) override{
+	void on_update(data_pass_t<Arg> data) override{
 		std::invoke(fn, data);
 	}
 };
@@ -143,20 +143,29 @@ auto make_listener(propagate_type data_propagate_type, Fn&& fn){
 	using ArgTy = std::tuple_element_t<0, FnTrait>;
 	using DecayTy = std::decay_t<ArgTy>;
 	static_assert(std::tuple_size_v<FnTrait> == 1);
-	if constexpr (spec_of<DecayTy, data_carrier>){
-		return listener<std::decay_t<Fn>, typename DecayTy::value_type>{data_propagate_type, std::forward<Fn>(fn)};
-	}else if constexpr (std::is_lvalue_reference_v<ArgTy> && std::is_const_v<std::remove_reference_t<ArgTy>>){
-		//if is const reference, pass by view
-		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](data_carrier<DecayTy>& data){
-			std::invoke(f, data.get_ref_view());
-		});
-	}else if constexpr (!std::is_lvalue_reference_v<ArgTy>){
-		return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](data_carrier<DecayTy>& data){
-			std::invoke(f, data.get());
-		});
+
+	using base_value = react_flow::data_base_type_t<DecayTy>;
+
+	if constexpr (!data_carrier<base_value>::is_trivial){
+		if constexpr (spec_of<DecayTy, data_carrier>){
+			return listener<std::decay_t<Fn>, typename DecayTy::value_type>{data_propagate_type, std::forward<Fn>(fn)};
+		}else if constexpr (std::is_lvalue_reference_v<ArgTy> && std::is_const_v<std::remove_reference_t<ArgTy>>){
+			//if is const reference, pass by view
+			return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](data_carrier<DecayTy>& data){
+				std::invoke(f, data.get_ref_view());
+			});
+		}else if constexpr (!std::is_lvalue_reference_v<ArgTy>){
+			return react_flow::make_listener(data_propagate_type, [f = std::forward<Fn>(fn)](data_carrier<DecayTy>& data){
+				std::invoke(f, data.get());
+			});
+		}else{
+			static_assert(false, "type variant not supported");
+		}
 	}else{
-		static_assert(false, "type variant not supported");
+		return std::forward<Fn>(fn);
 	}
+
+
 }
 
 export

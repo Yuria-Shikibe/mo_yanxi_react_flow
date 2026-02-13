@@ -173,12 +173,12 @@ namespace mo_yanxi::react_flow{
 		}
 
 
-		virtual void on_update(data_carrier<T>& data){
+		virtual void on_update(data_pass_t<T> data){
 		}
 
 
 		void on_update(data_carrier<T>&& data){
-			this->on_update(data);
+			this->on_update(react_flow::pass_data(data));
 		}
 
 		void mark_updated(const std::size_t from_index) noexcept final{
@@ -192,7 +192,7 @@ namespace mo_yanxi::react_flow{
 			assert(from_index == 0);
 			this->data_pending_state_ = data_pending_state::done;
 			auto& storage = data_carrier_cast<T>(in_data);
-			this->on_update(storage);
+			this->on_update(std::move(storage));
 		}
 
 	public:
