@@ -19,14 +19,6 @@ void modifier_test(){
 
 	auto& num_input = manager.add_node<provider_general<std::string>>();
 
-	auto node = make_transformer<descriptor<std::string, {true}, std::string_view>>([](std::string_view input) -> std::optional<int> {
-		int v;
-		if(const auto [ptr, ec] = std::from_chars(input.data(), input.data() + input.size(), v); ec == std::errc{}){
-			return v;
-		}
-
-		return std::nullopt;
-	});
 
 	auto& stoi = manager.add_node(make_transformer<descriptor<std::string, {true}, std::string_view>>([](std::string_view input) -> std::optional<int> {
 		int v;
@@ -88,3 +80,85 @@ Expected:
 !Fetch: 1110
 */
 }
+
+export
+void move_only_test(){
+	using namespace mo_yanxi::react_flow;
+
+	manager manager;
+	auto& num_input = manager.add_node<provider_general<int>>();
+
+	auto& node = manager.add_node(make_transformer([](int input){
+		return std::make_unique<int>(input);
+	}));
+
+	auto& listener1 = manager.add_node(make_listener([](data_pass_t<std::unique_ptr<int>> input){
+		auto i = input.extract();
+		if(i){
+			std::println("1 Move: {}", *i);
+		}else{
+			std::println("1 Move: {}", nullptr);
+		}
+	}));
+
+	auto& listener2 = manager.add_node(make_listener([](data_pass_t<std::unique_ptr<int>> input){
+		auto i = input.extract();
+		if(i){
+			std::println("2 Move: {}", *i);
+		}else{
+			std::println("2 Move: {}", nullptr);
+		}
+	}));
+
+	connect_chain({&num_input, &node, &listener1});
+	connect_chain({&node, &listener2});
+	num_input.update_value(114514);
+}
+
+
+
+export
+void view_test(){
+	using namespace mo_yanxi::react_flow;
+
+	struct not_trivial{
+		int value;
+
+		not_trivial() = default;
+
+		not_trivial(int value)
+			: value(value){
+		}
+
+		not_trivial(const not_trivial& other)
+			: value(other.value){
+		}
+
+		not_trivial& operator=(const not_trivial& other){
+			if(this == &other) return *this;
+			value = other.value;
+			return *this;
+		}
+	};
+
+	manager manager;
+	auto& num_input = manager.add_node<provider_general<int>>();
+
+	auto& node = manager.add_node(make_transformer<int>(std::in_place_type<descriptor<not_trivial, {true}, const not_trivial*>>,[](int input){
+		return not_trivial{input};
+	}));
+
+	auto& listener1 = manager.add_node(make_listener([](data_pass_t<const not_trivial*> input){
+		std::println("Input: {:p}->{}", (void*)input, input->value);
+	}));
+
+	auto& listener2 = manager.add_node(make_listener([](data_pass_t<const not_trivial*> input){
+		std::println("Input: {:p}->{}", (void*)input, input->value);
+	}));
+
+	connect_chain({&num_input, &node, &listener1});
+	connect_chain({&node, &listener2});
+	num_input.update_value(114514);
+}
+
+

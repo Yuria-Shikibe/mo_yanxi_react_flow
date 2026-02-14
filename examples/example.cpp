@@ -100,5 +100,6 @@ void simple_io_async_example(){
 
 
 int main(){
-	simple_io_async_example();
+	// move_only_test();
+	view_test();
 }

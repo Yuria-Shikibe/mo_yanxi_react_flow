@@ -276,9 +276,6 @@ namespace mo_yanxi::react_flow{
 					}
 				}
 				manager_thread_done_buffer_.clear();
-
-			RET:
-				(void)0;
 			}
 		}
 

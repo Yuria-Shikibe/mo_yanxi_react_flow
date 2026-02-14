@@ -158,7 +158,7 @@ target_end()
 
 -- 示例 Target
 target("mo_yanxi.react_flow.example")
-    add_rules("project.binary", "project.optimized")
+    add_rules("project.binary")
 
     set_default(false)
 

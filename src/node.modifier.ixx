@@ -401,8 +401,12 @@ namespace mo_yanxi::react_flow{
 
 	export
 	template <typename Ret, typename Fn, typename... Args>
-		requires (std::is_invocable_r_v<typename descriptor_trait<Ret>::input_pass_type, Fn, typename descriptor_trait<
-			Args>::operator_pass_type...> && spec_of_descriptor<Ret> && (spec_of_descriptor<Args> && ...))
+		requires (std::is_invocable_r_v<
+			typename descriptor_trait<Ret>::input_pass_type,
+			Fn,
+			typename descriptor_trait<Args>::operator_pass_type...>
+			&& spec_of_descriptor<Ret>
+			&& (spec_of_descriptor<Args> && ...))
 	struct transformer final : modifier_base<transformer<Ret, Fn, Args...>, Ret, Args...>{
 	private:
 		using base = modifier_base<transformer, Ret, Args...>;

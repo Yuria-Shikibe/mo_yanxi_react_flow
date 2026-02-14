@@ -54,7 +54,7 @@ namespace mo_yanxi::react_flow{
 		successor_list(const successor_list& other) = delete;
 		successor_list& operator=(const successor_list& other) = delete;
 
-		successor_list(successor_list&& other) noexcept : using_heap_(other.using_heap_), size_(other.size_) {
+		successor_list(successor_list&& other) noexcept : size_(other.size_), using_heap_(other.using_heap_) {
 			if (other.using_heap_) {
 				std::construct_at(&storage_.heap, std::move(other.storage_.heap));
 			} else {

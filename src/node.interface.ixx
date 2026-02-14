@@ -158,39 +158,50 @@ namespace mo_yanxi::react_flow{
 
 	template <typename Rng, typename T>
 	void push_to_successors(Rng&& range, data_carrier<T>&& data){
+
 		if constexpr (data_carrier<T>::is_trivial){
 			for(const successor_entry& e : range){
 				e.update(std::move(data));
 			}
 		}else{
-			//try to move
-			const auto size = std::ranges::size(range);
-			if (size == 0)return;
-			if (size == 1){
-				const successor_entry& e = *std::ranges::begin(range);
-				e.update(std::move(data));
-			}else{
-				data_carrier<T> cropped{std::as_const(data)};
-				auto cur = std::ranges::begin(range);
-				const auto last = std::ranges::prev(std::ranges::end(range));
-
-				while(true){
-					const successor_entry& e = *cur;
-					e.update(std::move(cropped));
-
-					++cur;
-					if(cur != last){
-						if(cropped.is_empty()){
-							cropped = data;
-						}
-					} else{
-						break;
-					}
+			if constexpr (!std::is_copy_constructible_v<data_carrier<T>>){
+				const auto size = std::ranges::size(range);
+				if (size == 0)return;
+				for(const successor_entry& e : range){
+					e.update(std::move(data));
+					if(data.is_empty())return;
 				}
+			}else{
+				//try to move
+				const auto size = std::ranges::size(range);
+				if (size == 0)return;
+				if (size == 1){
+					const successor_entry& e = *std::ranges::begin(range);
+					e.update(std::move(data));
+				}else{
+					data_carrier<T> cropped{std::as_const(data)};
+					auto cur = std::ranges::begin(range);
+					const auto last = std::ranges::prev(std::ranges::end(range));
 
-				const successor_entry& e = *cur;
-				e.update(std::move(data));
+					while(true){
+						const successor_entry& e = *cur;
+						e.update(std::move(cropped));
+
+						++cur;
+						if(cur != last){
+							if(cropped.is_empty()){
+								cropped = data;
+							}
+						} else{
+							break;
+						}
+					}
+
+					const successor_entry& e = *cur;
+					e.update(std::move(data));
+				}
 			}
+
 		}
 	}
 

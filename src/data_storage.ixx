@@ -8,6 +8,7 @@ module;
 export module mo_yanxi.react_flow.util;
 
 import mo_yanxi.meta_programming;
+import mo_yanxi.concepts;
 import std;
 
 namespace mo_yanxi::react_flow{
@@ -421,7 +422,7 @@ namespace mo_yanxi::react_flow{
 			throw std::runtime_error("w is empty");
 		}
 
-		[[nodiscard]] constexpr T get_copy() const noexcept(std::is_nothrow_copy_constructible_v<T>){
+		[[nodiscard]] constexpr T get_copy() const requires (std::is_copy_constructible_v<T>){
 			if(std::holds_alternative<T>(storage_)){
 				return std::get<T>(storage_);
 			}
@@ -433,6 +434,10 @@ namespace mo_yanxi::react_flow{
 			}
 
 			throw std::runtime_error("w is empty");
+		}
+
+		[[nodiscard]] constexpr T extract(){
+			return std::get<T>(std::exchange(storage_, std::monostate{}));
 		}
 
 		[[nodiscard]] constexpr bool is_empty() const{
@@ -490,6 +495,10 @@ namespace mo_yanxi::react_flow{
 		}
 
 		[[nodiscard]] constexpr T get_copy() const noexcept{
+			return value_;
+		}
+
+		[[nodiscard]] constexpr T extract() const noexcept{
 			return value_;
 		}
 
@@ -669,18 +678,30 @@ namespace mo_yanxi::react_flow{
 		bool fresh;
 	};
 
-	static_assert(std::ranges::view<std::span<int>>);
+	export
+	template <typename T>
+	struct descriptor_enable_borrow : std::false_type{};
 
-	template <typename S, typename D>
-		requires (std::convertible_to<S, D>)
+	template <typename T>
+	concept borrow = std::ranges::view<T> || spec_of<T, std::reference_wrapper> || descriptor_enable_borrow<T>::value;
+
+	template <descriptor_tag tag, typename S, typename D>
 	struct convertor{
 
-		FORCE_INLINE static D operator()(data_carrier<S>&& input) requires (!std::ranges::view<D> && !std::same_as<S, D>){
+		FORCE_INLINE static D operator()(data_carrier<S>&& input) requires (!borrow<D> && !std::same_as<S, D> && std::convertible_to<S, D>){
 			return input.get();
 		}
 
-		FORCE_INLINE static D operator()(data_carrier<S>&& input) requires (std::ranges::view<D> && !std::same_as<S, D>){
+		FORCE_INLINE static D operator()(data_carrier<S>&& input) requires (borrow<D> && !std::same_as<S, D> && std::convertible_to<const S&, D>){
+			static_assert(tag.cache, "Default Convertor convert to view requires cache");
+			static_assert(!data_carrier<S>::is_trivial, "View of trivial is not allowed");
 			return input.get_ref_view();
+		}
+
+		FORCE_INLINE static D operator()(data_carrier<S>&& input) requires (std::is_pointer_v<D> && std::convertible_to<std::add_pointer_t<S>, D>){
+			static_assert(tag.cache, "Default Convertor convert to view requires cache");
+			static_assert(!data_carrier<S>::is_trivial, "View of trivial is not allowed");
+			return std::addressof(input.get_ref_view());
 		}
 
 		FORCE_INLINE static data_carrier<D>&& operator()(data_carrier<S>&& input) noexcept requires (std::same_as<S, D>){
@@ -689,7 +710,7 @@ namespace mo_yanxi::react_flow{
 	};
 
 	export
-	template <typename InputType, descriptor_tag Tag = {}, typename OutputType = InputType, typename ConvertorTy = convertor<InputType, OutputType>>
+	template <typename InputType, descriptor_tag Tag = {}, typename OutputType = InputType, typename ConvertorTy = convertor<Tag, InputType, OutputType>>
 		requires requires(data_carrier<InputType>&& input, const ConvertorTy& transformer){
 			{ std::invoke(transformer, std::move(input)) } -> std::convertible_to<data_carrier<OutputType>>;
 		}
