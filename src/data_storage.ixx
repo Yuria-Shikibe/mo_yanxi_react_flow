@@ -533,7 +533,7 @@ namespace mo_yanxi::react_flow{
 	export
 	template <typename T>
 		requires (data_carrier<T>::is_trivial && sizeof(T) > sizeof(void*) * 2)
-	constexpr data_pass_t<T> pass_data(data_carrier<T>& input) noexcept {
+	constexpr const data_pass_t<T>& pass_data(data_carrier<T>& input) noexcept {
 		return input.get_ref_view();
 	}
 
@@ -578,19 +578,6 @@ namespace mo_yanxi::react_flow{
 		return reinterpret_cast<const data_carrier<T>&&>(obj);
 	}
 
-	template <typename T>
-	struct data_base_type{
-		using type = T;
-	};
-
-	template <typename T>
-	struct data_base_type<data_carrier<T>>{
-		using type = T;
-	};
-
-	export
-	template <typename T>
-	using data_base_type_t = typename data_base_type<data_carrier<T>>::type;
 
 	export
 	template <typename T>
