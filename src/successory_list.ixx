@@ -2,6 +2,14 @@ module;
 
 #include <mo_yanxi/adapted_attributes.hpp>
 
+#if defined(__GNUC__) || defined(__clang__)
+	#define NO_INLINE [[gnu::noinline]]
+#elif _MSC_VER
+	#define NO_INLINE [[msvc::noinline]]
+#else
+	#define NO_INLINE
+#endif
+
 export module mo_yanxi.react_flow:successory_list;
 
 import std;
