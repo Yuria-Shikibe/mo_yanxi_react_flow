@@ -809,6 +809,16 @@ namespace mo_yanxi::react_flow{
 	};
 
 	template <std::size_t N>
+	struct get_smallest_uint {
+		using type = std::conditional_t<N <= std::numeric_limits<std::uint8_t>::max(), std::uint8_t,
+			std::conditional_t<N <= std::numeric_limits<std::uint16_t>::max(), std::uint16_t,
+				std::conditional_t<N <= std::numeric_limits<std::uint32_t>::max(), std::uint32_t, std::uint64_t>>>;
+	};
+
+	template <std::size_t N>
+	using smallest_uint_t = typename get_smallest_uint<N>::type;
+
+	template <std::size_t N>
 	consteval std::array<smallest_uint_t<N>, N> make_index_array(const bool(& input)[N]){
 		smallest_uint_t<N> sz{};
 		std::array<smallest_uint_t<N>, N> rst;
