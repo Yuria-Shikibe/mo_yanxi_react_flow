@@ -531,10 +531,10 @@ namespace mo_yanxi::react_flow{
 	template <typename... Args, typename Fn>
 		requires (sizeof...(Args) > 0)
 	[[nodiscard]] FORCE_INLINE auto make_transformer(propagate_type data_propagate_type, Fn&& fn){
-		auto adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
+		decltype(auto) adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
 		using return_type = std::invoke_result_t<decltype(adapted), typename descriptor_trait<make_descriptor_t<
 			Args>>::operator_pass_type...>;
-		return transformer<descriptor<return_type>, decltype(adapted), make_descriptor_t<Args>...>{
+		return transformer<descriptor<return_type>, std::decay_t<decltype(adapted)>, make_descriptor_t<Args>...>{
 				data_propagate_type, std::move(adapted)
 			};
 	}
@@ -550,10 +550,10 @@ namespace mo_yanxi::react_flow{
 	template <typename... Args, typename Ret, typename Fn>
 	[[nodiscard]] FORCE_INLINE auto make_transformer(propagate_type data_propagate_type, std::in_place_type_t<Ret>,
 		Fn&& fn){
-		auto adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
+		decltype(auto) adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
 
 		if constexpr(spec_of_descriptor<Ret>){
-			return transformer<Ret, std::decay_t<Fn>, make_descriptor_t<Args>...>{
+			return transformer<Ret, std::decay_t<decltype(adapted)>, make_descriptor_t<Args>...>{
 					data_propagate_type, std::move(adapted)
 				};
 		} else{

@@ -24,7 +24,7 @@ namespace mo_yanxi::react_flow{
 		progress_type progress;
 
 		constexpr explicit operator bool() const noexcept{
-			return invalid_progress == progress;
+			return invalid_progress != progress;
 		}
 
 		[[nodiscard]] constexpr float get_f32_progress() const noexcept{
@@ -82,16 +82,16 @@ namespace mo_yanxi::react_flow{
 		using async_task_base::async_task_base;
 
 		void set_progress_done() noexcept{
-			progress.store(f32_to_progress_scl, std::memory_order_relaxed);
+			progress.store(f32_to_progress_scl, std::memory_order_release);
 		}
 
 		void set_progress(float prog) noexcept{
 			progress.store(static_cast<progress_type>(std::clamp(prog, 0.f, 1.f) * static_cast<float>(f32_to_progress_scl)),
-				std::memory_order_relaxed);
+				std::memory_order_release);
 		}
 
 		void set_progress(unsigned cur, unsigned total) noexcept{
-			progress.store(std::min(cur * f32_to_progress_scl / total, f32_to_progress_scl), std::memory_order_relaxed);
+			progress.store(std::min(cur * f32_to_progress_scl / total, f32_to_progress_scl), std::memory_order_release);
 		}
 
 		progress_check get_progress() const noexcept override{

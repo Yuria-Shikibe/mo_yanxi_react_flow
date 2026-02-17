@@ -123,14 +123,15 @@ namespace mo_yanxi::react_flow{
 		}
 
 		[[nodiscard]] data_state get_data_state() const noexcept override{
+			if(!parent)return data_state::failed;
 			return this->parent->get_data_state();
 		}
 
 		void check_expired_and_update(bool allow_expired){
 			if(!this->is_data_expired()) return;
 
-			if(auto rst = this->request(allow_expired)){
-				this->on_update(rst.value().fetch());
+			if(auto rst = this->request_raw(allow_expired)){
+				this->on_update(rst.value());
 			}
 		}
 

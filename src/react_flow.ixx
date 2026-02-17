@@ -32,8 +32,10 @@ namespace mo_yanxi::react_flow{
 
 				if constexpr(std::same_as<decltype(l), node&>){
 					l.connect_successor(r);
-				} else if(std::same_as<decltype(*l), node&>){
+				} else if constexpr(std::same_as<decltype(*l), node&>){
 					(*l).connect_successor(*r);
+				}else{
+					static_assert(false, "unknown type");
 				}
 			}
 		}
