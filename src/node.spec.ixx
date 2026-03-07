@@ -69,7 +69,6 @@ namespace mo_yanxi::react_flow{
 		request_pass_handle<T> request_raw(bool allow_expired) override{
 			return make_request_handle_unexpected<T>(data_state::failed);
 		}
-
 	private:
 
 		bool connect_successors_impl(const std::size_t slot, node& post) final{
@@ -102,6 +101,7 @@ namespace mo_yanxi::react_flow{
 		friend node;
 
 	private:
+		static constexpr data_type_index node_data_type_index = unstable_type_identity_of<T>();
 		raw_node_ptr parent{};
 
 	protected:
@@ -112,7 +112,17 @@ namespace mo_yanxi::react_flow{
 	public:
 		[[nodiscard]] terminal() = default;
 
-		static constexpr data_type_index node_data_type_index = unstable_type_identity_of<T>();
+		bool pull_and_push(bool allow_expired) override {
+			if(!parent) return false;
+
+			if(auto rst = this->terminal<T>::request_raw(allow_expired)){
+				this->data_pending_state_ = data_pending_state::done;
+				auto carrier = std::move(rst).value();
+				this->on_update(carrier);
+				return true;
+			}
+			return false;
+		}
 
 		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
 			return {&parent, 1};
@@ -233,6 +243,22 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
+		bool pull_and_push(bool allow_expired) override {
+			if(!this->parent) return false;
+
+			// 强制调用基类的 request_raw，避免和本类的缓存更新逻辑产生递归
+			if(auto rst = this->terminal<T>::request_raw(allow_expired)){
+				this->data_pending_state_ = data_pending_state::done;
+
+				// 更新自身缓存并触发回调
+				this->cache_ = std::move(rst).value().get();
+				data_carrier<T> carrier{this->cache_};
+				this->on_update(carrier);
+				return true;
+			}
+			return false;
+		}
+
 	protected:
 		void on_pulse_received(manager& m) override{
 			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
@@ -305,8 +331,10 @@ namespace mo_yanxi::react_flow{
 
 		using provider_general<T>::update_value;
 
-		void update_value(){
-			on_update();
+		bool pull_and_push([[maybe_unused]] bool allow_expired) override {
+			this->data_pending_state_ = data_pending_state::done;
+			react_flow::push_to_successors(this->successors, data_carrier<T>{this->data_});
+			return true;
 		}
 
 		template <bool check_equal = false, std::invocable<T&> Proj, typename Ty>

@@ -134,6 +134,17 @@ namespace mo_yanxi::react_flow{
 #pragma endregion
 
 	public:
+		bool pull_and_push(bool allow_expired) override {
+			auto [arguments, state, success] = this->load_arguments<true>(trigger_type::active, allow_expired, nullptr);
+			if(success) {
+				// 更新挂起状态为已完成
+				this->data_pending_state_ = data_pending_state::done;
+				// apply_arguments 会调用底层逻辑计算结果、刷新缓存并执行 push_to_successors
+				static_cast<Impl*>(this)->apply_arguments(arguments);
+				return true;
+			}
+			return false;
+		}
 
 		[[nodiscard]] data_state get_data_state() const noexcept override{
 			if constexpr(descriptor_trait<Ret>::cached){

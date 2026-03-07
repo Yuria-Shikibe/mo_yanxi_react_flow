@@ -410,6 +410,10 @@ namespace mo_yanxi::react_flow{
 			return false;
 		}
 
+		virtual bool pull_and_push(bool allow_expired) {
+			return false;
+		}
+
 	public:
 		virtual bool erase_successors_single_edge(std::size_t slot, node& post) noexcept{
 			return false;
