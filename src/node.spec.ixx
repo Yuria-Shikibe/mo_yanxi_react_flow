@@ -305,6 +305,10 @@ namespace mo_yanxi::react_flow{
 
 		using provider_general<T>::update_value;
 
+		void update_value(){
+			on_update();
+		}
+
 		template <bool check_equal = false, std::invocable<T&> Proj, typename Ty>
 			requires (std::assignable_from<std::invoke_result_t<Proj, T&>, Ty&&>)
 		void update_value(Proj proj, Ty&& value){

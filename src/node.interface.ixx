@@ -374,13 +374,22 @@ namespace mo_yanxi::react_flow{
 
 		bool disconnect_successor(node& post){
 			const auto rng = post.get_in_socket_type_index();
-			if(auto itr = std::ranges::find(rng, get_out_socket_type_index()); itr != rng.end()){
-				auto slot = std::ranges::distance(rng.begin(), itr);
-				if(erase_successors_single_edge(slot, post)){
-					post.erase_predecessor_single_edge(slot, *this);
-					return true;
+			const auto target_type = get_out_socket_type_index();
+			bool found_type_match = false;
+
+			for(auto itr = rng.begin(); itr != rng.end(); ++itr){
+				if(*itr == target_type){
+					found_type_match = true;
+					auto slot = static_cast<std::size_t>(std::ranges::distance(rng.begin(), itr));
+
+					if(erase_successors_single_edge(slot, post)){
+						post.erase_predecessor_single_edge(slot, *this);
+						return true;
+					}
 				}
-			} else{
+			}
+
+			if(!found_type_match){
 				throw invalid_node_error{"Failed To Find Slot"};
 			}
 
@@ -475,14 +484,27 @@ namespace mo_yanxi::react_flow{
 		}
 
 		node_holder(const node_holder& other) = delete;
-		node_holder(node_holder&& other) noexcept = default;
+
+		node_holder(node_holder&& other) noexcept
+			: node(std::exchange(other.node, {})){
+		}
+
 		node_holder& operator=(const node_holder& other) = delete;
-		node_holder& operator=(node_holder&& other) noexcept = default;
+
+		node_holder& operator=(node_holder&& other) noexcept{
+			if(this == &other) return *this;
+			static_cast<struct node&>(node).decr_ref();
+			node = std::exchange(other.node, {});
+			return *this;
+		}
 
 		node_holder() = default;
 
 		template <typename ...Args>
-		explicit(false) node_holder(std::in_place_type_t<T>, Args&& ...args) : node(std::forward<Args>(args)...){}
+			requires (std::constructible_from<T, Args&&...>)
+		explicit(false) node_holder(Args&& ...args) : node(std::forward<Args>(args)...){
+			static_cast<struct node&>(node).incr_ref();
+		}
 
 		template <typename S>
 		auto* operator->(this S& self) noexcept{

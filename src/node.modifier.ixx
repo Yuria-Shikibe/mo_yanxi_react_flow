@@ -107,7 +107,7 @@ namespace mo_yanxi::react_flow{
 			return successors_;
 		}
 
-	private:
+	protected:
 		bool connect_successors_impl(std::size_t slot, node& post) final{
 			if(auto& ptr = post.get_inputs()[slot]){
 				post.erase_predecessor_single_edge(slot, *ptr);
@@ -121,10 +121,7 @@ namespace mo_yanxi::react_flow{
 
 		void connect_predecessor_impl(std::size_t slot, node& prev) final{
 			if(parents_[slot]){
-				const auto rng = parents_[slot]->get_outputs();
-				const auto idx = std::ranges::distance(rng.begin(),
-					std::ranges::find(rng, this, &successor_entry::get));
-				parents_[slot]->erase_successors_single_edge(idx, *this);
+				parents_[slot]->erase_successors_single_edge(slot, *this);
 			}
 			parents_[slot] = std::addressof(prev);
 		}
