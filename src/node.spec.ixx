@@ -313,81 +313,108 @@ namespace mo_yanxi::react_flow{
 		}
 	};
 
-	export
-	template <typename T>
-	struct provider_cached : provider_general<T>{
-		using value_type = T;
-		static_assert(std::is_object_v<value_type>);
+export
+template <typename T, typename O = T, std::invocable<const T&> F = std::identity>
+	requires std::convertible_to<std::invoke_result_t<F, const T&>, O>
+struct provider_cached : provider_general<O> {
+    using value_type = T;
+    using output_type = O;
+    using converter_type = F;
 
-	private:
-		T data_{};
+    static_assert(std::is_object_v<value_type>);
 
-	public:
-		[[nodiscard]] provider_cached() = default;
+private:
+    T data_{};
+    ADAPTED_NO_UNIQUE_ADDRESS F converter_{};
 
-		[[nodiscard]] explicit provider_cached(propagate_type propagate_type)
-			: provider_general<T>(propagate_type){
-		}
+public:
+    [[nodiscard]] provider_cached() = default;
 
-		using provider_general<T>::update_value;
+    [[nodiscard]] explicit provider_cached(propagate_type propagate_type, F converter = F{})
+        : provider_general<O>(propagate_type), converter_(std::move(converter)) {
+    }
 
-		bool pull_and_push([[maybe_unused]] bool allow_expired) override {
-			this->data_pending_state_ = data_pending_state::done;
-			react_flow::push_to_successors(this->successors, data_carrier<T>{this->data_});
-			return true;
-		}
+    // 隐藏 provider_general<O> 中的 update_value，因为我们想要更新的是内部状态 T
+    void update_value(T&& value) {
+        data_ = std::move(value);
+        on_update();
+    }
 
-		template <bool check_equal = false, std::invocable<T&> Proj, typename Ty>
-			requires (std::assignable_from<std::invoke_result_t<Proj, T&>, Ty&&>)
-		void update_value(Proj proj, Ty&& value){
-			auto& val = std::invoke(std::move(proj), data_);
-			if constexpr(check_equal){
-				if(val == value){
-					return;
-				}
-			}
+    void update_value(const T& value) {
+        data_ = value;
+        on_update();
+    }
 
-			val = std::forward<Ty>(value);
-			on_update();
-		}
+    const T& get_raw_cache() const noexcept {
+        return data_;
+    }
 
-		[[nodiscard]] data_state get_data_state() const noexcept override{
-			return data_state::fresh;
-		}
+    O get_output_cache() const {
+        return std::invoke_r<O>(converter_, data_);
+    }
 
-		request_pass_handle<T> request_raw(bool allow_expired) override{
-			//source is always fresh
-			return react_flow::make_request_handle_expected_ref(data_, false);
-		}
+    bool pull_and_push([[maybe_unused]] bool allow_expired) override {
+        this->data_pending_state_ = data_pending_state::done;
+        react_flow::push_to_successors(this->successors, data_carrier<O>{get_output_cache()});
+        return true;
+    }
 
-	protected:
-		void on_push(std::size_t, data_carrier_obj&& in_data) override{
-			auto& storage = data_carrier_cast<T>(in_data);
-			data_ = storage.get();
-			on_update();
-		}
+    template <bool check_equal = false, std::invocable<T&> Proj, typename Ty>
+        requires (std::assignable_from<std::invoke_result_t<Proj, T&>, Ty&&>)
+    void update_value(Proj proj, Ty&& value) {
+        auto& val = std::invoke(std::move(proj), data_);
+        if constexpr(check_equal){
+            if(val == value){
+                return;
+            }
+        }
 
-		void on_pulse_received(manager& m) override{
-			if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
-			this->data_pending_state_ = data_pending_state::done;
-			react_flow::push_to_successors(this->successors, data_carrier{data_});
-		}
+        val = std::forward<Ty>(value);
+        on_update();
+    }
 
-	private:
-		void on_update(){
-			switch(this->data_propagate_type_){
-			case propagate_type::eager : this->data_pending_state_ = data_pending_state::done;
-				react_flow::push_to_successors(this->successors, data_carrier{data_});
-				break;
-			case propagate_type::lazy : this->data_pending_state_ = data_pending_state::done;
-				node::mark_updated(-1);
-				break;
-			case propagate_type::pulse : this->data_pending_state_ = data_pending_state::waiting_pulse;
-				break;
-			default : std::unreachable();
-			}
-		}
-	};
+    [[nodiscard]] data_state get_data_state() const noexcept override {
+        return data_state::fresh;
+    }
+
+    request_pass_handle<O> request_raw(bool allow_expired) override {
+        // 由于 O 可能是由转换器即时生成的临时值，这里建议使用支持传值的 request handle 构建函数
+        // 如果您的框架内没有 expected_val，可能需要根据具体 util 进行微调
+        return react_flow::make_request_handle_expected<O>(get_output_cache(), false);
+    }
+
+protected:
+    // 注意：尽管对外是 O，但如果通过 untyped interface 被 push，我们依然假设推入的是基础类型 T
+    void on_push(std::size_t, data_carrier_obj&& in_data) override {
+        auto& storage = data_carrier_cast<T>(in_data);
+        data_ = storage.get();
+        on_update();
+    }
+
+    void on_pulse_received(manager& m) override {
+        if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
+        this->data_pending_state_ = data_pending_state::done;
+        react_flow::push_to_successors(this->successors, data_carrier<O>{get_output_cache()});
+    }
+
+private:
+    void on_update() {
+        switch(this->data_propagate_type_) {
+        case propagate_type::eager :
+            this->data_pending_state_ = data_pending_state::done;
+            react_flow::push_to_successors(this->successors, data_carrier<O>{get_output_cache()});
+            break;
+        case propagate_type::lazy :
+            this->data_pending_state_ = data_pending_state::done;
+            node::mark_updated(-1);
+            break;
+        case propagate_type::pulse :
+            this->data_pending_state_ = data_pending_state::waiting_pulse;
+            break;
+        default : std::unreachable();
+        }
+    }
+};
 
 
 }

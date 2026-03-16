@@ -45,6 +45,7 @@ export
 template <typename... Args>
 	requires (std::derived_from<Args, node> && ...)
 void connect_chain(Args&... nodes){
+	//TODO provide type check at compile time?
 	react_flow::connect_chain({std::addressof(nodes)...});
 }
 }
