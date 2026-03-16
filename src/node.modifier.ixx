@@ -496,7 +496,7 @@ namespace mo_yanxi::react_flow{
 
 	template <typename Fn>
 	FORCE_INLINE auto adapt_fn_(Fn&& fn){
-		using CurrentTy = function_traits<std::decay_t<Fn>>::mem_func_args_type;
+		using CurrentTy = function_traits<std::remove_pointer_t<std::decay_t<Fn>>>::mem_func_args_type;
 		using Expected = unary_apply_to_tuple_t<data_pass_t, unary_apply_to_tuple_t<extract_value_t,
 			unary_apply_to_tuple_t<std::decay_t, CurrentTy>>>;
 		if constexpr(std::same_as<CurrentTy, Expected>){
@@ -599,8 +599,7 @@ namespace mo_yanxi::react_flow{
 	template <typename Fn>
 	[[nodiscard]] FORCE_INLINE auto make_transformer(propagate_type data_propagate_type, Fn&& fn){
 		auto adapted = react_flow::adapt_fn_(std::forward<Fn>(fn));
-		return transformer_unambiguous<decltype(adapted)>(data_propagate_type,
-			react_flow::adapt_fn_(std::move(adapted)));
+		return transformer_unambiguous<decltype(adapted)>(data_propagate_type, std::move(adapted));
 	}
 
 	export

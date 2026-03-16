@@ -14,21 +14,36 @@ Node Graph Implementation: provider -> transformer -> listener
 
 | Benchmark  | Input Size | Time (ns) | CPU (ns) | Iterations |
 |------------|------------|-----------|----------|------------|
-| **Node**   | 1024       | 195       | 193      | 3733333    |
-| **Node**   | 4096       | 177       | 180      | 4072727    |
-| **Node**   | 32768      | 172       | 173      | 4072727    |
-| **Node**   | 65536      | 179       | 180      | 4072727    |
-| **Native** | 1024       | 131       | 131      | 5600000    |
-| **Native** | 4096       | 128       | 128      | 5600000    |
-| **Native** | 32768      | 122       | 122      | 4977778    |
-| **Native** | 65536      | 130       | 131      | 5600000    |
+| **Node**   | 8          | 195       | 193      | 3733333    |
+| **Native** | 8          | 122       | 122      | 4977778    |
 
 Overhead on three node is about **50ns** (29% on this _stoi_ task)
 
+### Heavy Load Data Pipeline Benchmark
+> Task: Heavy mathematical operations (`std::vector<double>` processing including Normalize, EMA, MACD, and Score Aggregation).
+>
+> Node Graph Implementation: provider -> 4x transformer -> listener
+
+| Benchmark  | Input Size | Time (ns) | CPU (ns) | Iterations |
+|------------|------------|-----------|----------|------------|
+| **Native** | 1000       | 17663     | 16881    | 40727      |
+| **Node**   | 1000       | 20202     | 19043    | 34462      |
+| **Native** | 4096       | 71887     | 72246    | 8651       |
+| **Node**   | 4096       | 83124     | 81961    | 8960       |
+| **Native** | 32768      | 581804    | 571987   | 1120       |
+| **Node**   | 32768      | 642966    | 641741   | 1120       |
+| **Native** | 100000     | 2201473   | 2001953  | 320        |
+| **Node**   | 100000     | 2837077   | 2572791  | 249        |
+
+**Analysis:**
+* **Stable Ratio:** For data sizes up to ~32k, the performance overhead of the node graph stays remarkably stable at around **10% - 15%** (1.1x to 1.15x slower than native direct calls).
+* **Extreme Scale:** At N=100,000, the overhead ratio spikes to **~1.28x**. This is likely due to CPU L3 cache exhaustion and the memory bandwidth costs of wrapping/moving massive `std::vector` instances across node boundaries. In contrast, the native compiler can aggressively inline and optimize memory reuse across continuous direct function calls.
+* **Conclusion:** Compared to the lightweight `stoi` task (which had a ~29% base routing overhead), heavy analytical pipelines effectively dilute the framework's dispatch costs. The remaining overhead is largely dominated by memory passing rather than the node graph logic itself, proving the framework is highly viable and scalable for complex, compute-heavy workflows.
+
 ## Dependency:
 * **C++23** supported compiler and standard library.
-* [_Utility_](https://github.com/Yuria-Shikibe/mo_yanxi_utility.git), basically meta programming thing and little concurrent facility.
-* [_Xmake_](https://xmake.io) is used as the build system.
+* [_Utility_](https://github.com/Yuria-Shikibe/mo_yanxi_utility.git), basically metaprogramming thing and little concurrent facility. (if this repo has a chance to get stars more than 20, I make remove this dependency)
+* [_Xmake_](https://xmake.io) is used as the build system. Or you can just download all used files and add them to your repo.
 * _gtest_ and _benchmark_, not auto included when install the library.
 
 ## Supports/Feature
