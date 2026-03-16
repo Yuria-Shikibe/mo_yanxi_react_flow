@@ -345,7 +345,7 @@ namespace mo_yanxi::react_flow{
 
 			data_state_ = state;
 
-			return {arguments, state, success};
+			return {std::move(arguments), state, success};
 		}
 
 	private:

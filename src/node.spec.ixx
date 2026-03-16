@@ -69,17 +69,17 @@ namespace mo_yanxi::react_flow{
 		request_pass_handle<T> request_raw(bool allow_expired) override{
 			return make_request_handle_unexpected<T>(data_state::failed);
 		}
-	private:
 
+		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
+			return try_erase(successors, slot, post);
+		}
+
+	protected:
 		bool connect_successors_impl(const std::size_t slot, node& post) final{
 			if(auto& ptr = post.get_inputs()[slot]){
 				post.erase_predecessor_single_edge(slot, *ptr);
 			}
 			return try_insert(successors, slot, post);
-		}
-
-		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
-			return try_erase(successors, slot, post);
 		}
 
 	protected:
@@ -164,6 +164,13 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
+		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
+			assert(slot == 0);
+			if(parent == std::addressof(prev)){
+				parent = {};
+			}
+		}
+
 	protected:
 		void connect_predecessor_impl(const std::size_t slot, node& prev) final{
 			assert(slot == 0);
@@ -174,13 +181,6 @@ namespace mo_yanxi::react_flow{
 				parent->erase_successors_single_edge(idx, *this);
 			}
 			parent = std::addressof(prev);
-		}
-
-		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
-			assert(slot == 0);
-			if(parent == std::addressof(prev)){
-				parent = {};
-			}
 		}
 
 
