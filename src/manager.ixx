@@ -8,7 +8,7 @@ export module mo_yanxi.react_flow:manager;
 import :node_interface;
 import mo_yanxi.utility;
 import mo_yanxi.concurrent.mpsc_queue;
-import mo_yanxi.concurrent.atomic_double_buffer;
+import mo_yanxi.concurrent.swmr_double_buffer;
 import mo_yanxi.flat_set;
 import mo_yanxi.algo;
 
@@ -132,7 +132,7 @@ namespace mo_yanxi::react_flow{
 
 		//TODO using small vector here?
 		using done_vec_type = std::vector<std::unique_ptr<async_task_base>>;
-		ccur::atomic_double_buffer<done_vec_type> async_done_buffer_{};
+		ccur::swmr_double_buffer<done_vec_type> async_done_buffer_{};
 		done_vec_type manager_thread_done_buffer_{};
 
 		std::jthread async_thread_{};
