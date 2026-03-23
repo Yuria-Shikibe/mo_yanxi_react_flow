@@ -334,6 +334,15 @@ public:
         : provider_general<O>(propagate_type), converter_(std::move(converter)) {
     }
 
+
+	void update_value_quiet(T&& value) {
+    	data_ = std::move(value);
+    }
+
+	void update_value_quiet(const T& value) {
+    	data_ = value;
+    }
+
     // 隐藏 provider_general<O> 中的 update_value，因为我们想要更新的是内部状态 T
     void update_value(T&& value) {
         data_ = std::move(value);
@@ -358,6 +367,7 @@ public:
         react_flow::push_to_successors(this->successors, data_carrier<O>{get_output_cache()});
         return true;
     }
+
 
     template <bool check_equal = false, std::invocable<T&> Proj, typename Ty>
         requires (std::assignable_from<std::invoke_result_t<Proj, T&>, Ty&&>)
@@ -417,4 +427,18 @@ private:
 };
 
 
+template <auto mfptr>
+struct member_ptr_invoker{
+	using MptrTrait = mptr_info<decltype(mfptr)>;
+	static typename MptrTrait::value_type operator()(typename MptrTrait::class_access_type* val) noexcept(std::is_nothrow_invocable_v<decltype(mfptr), typename MptrTrait::class_type*>){
+		return std::invoke(mfptr, val);
+	}
+};
+
+export
+template <auto mfptr>
+using provider_member = provider_cached<
+	typename mptr_info<decltype(mfptr)>::class_access_type*,
+	typename mptr_info<decltype(mfptr)>::value_type,
+	member_ptr_invoker<mfptr>>;
 }

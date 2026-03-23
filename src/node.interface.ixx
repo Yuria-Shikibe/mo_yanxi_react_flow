@@ -221,7 +221,7 @@ namespace mo_yanxi::react_flow{
 		friend node_pointer;
 
 	private:
-		std::size_t reference_count_{};
+		unsigned reference_count_{};
 
 #ifdef THREAD_CHECK
 		std::thread::id created_thread_id_{std::this_thread::get_id()};
