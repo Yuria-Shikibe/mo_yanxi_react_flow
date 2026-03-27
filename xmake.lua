@@ -5,20 +5,7 @@ set_version("1.0")
 
 option("spec_mo_yanxi_utility_path")
     set_description("External repository path (checks for xmake.lua)")
-    on_check(function (option)
-        import("core.base.option")
-        local p = os.getenv("MO_YANXI_UTILITY_PATH")
-        if p and #p > 0 then
-            local config_file = p
-            if os.isdir(p) then config_file = path.join(p, "xmake.lua") end
-            if os.isfile(config_file) then
-                option:set_value(path.normalize(config_file))
-            else
-                option:set_value(nil)
-                utils.warning("Invalid ext_repo_path: %s (xmake.lua not found)", p)
-            end
-        end
-    end)
+    set_default("")
     set_showmenu(true)
 option_end()
 
@@ -30,6 +17,10 @@ option_end()
 option("add_benchmark")
     set_default(false)
     set_description("Add add_benchmark target")
+option_end()
+
+option("add_examples")
+    set_default(false)
 option_end()
 
 option("use_libcxx")
@@ -130,18 +121,6 @@ target("mo_yanxi.react_flow")
         add_deps(pkg_name, {public = true})
     else
         add_packages(pkg_name, {public = true})
-
-        if is_mode("cmake_gen") then
-            on_load(function (target)
-                local pkg = target:pkg(pkg_name)
-                if pkg then
-                    local pkg_dir = pkg:installdir()
-                    local ixx_pattern = path.join(pkg_dir, "modules", "**.ixx")
-                    target:add("files", ixx_pattern, {public = true})
-                    print("Adding module files: " .. ixx_pattern)
-                end
-            end)
-        end
     end
 
 target_end()
@@ -160,6 +139,7 @@ target_end()
 target("mo_yanxi.react_flow.example")
     add_rules("project.binary")
 
+    set_enabled(has_config("add_examples"))
     set_default(false)
 
     add_files("examples/**.cpp")
@@ -176,7 +156,3 @@ target("mo_yanxi.react_flow.benchmark")
     add_packages("benchmark")
     add_files("benchmark/**.cpp")
 target_end()
-
-if os.isfile("./xmake2cmake.lua") then
-includes("xmake2cmake.lua")
-end
