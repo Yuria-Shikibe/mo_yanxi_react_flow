@@ -158,6 +158,10 @@ namespace mo_yanxi::react_flow{
 		[[nodiscard]] explicit manager(manager_no_async_t){
 		}
 
+		std::jthread& get_async_working_thread() noexcept{
+			return async_thread_;
+		}
+
 		template <std::derived_from<node> T, typename... Args>
 		NODISCARD_ON_ADD T& add_node(Args&&... args){
 			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::forward<Args>(args)...));
