@@ -13,382 +13,388 @@ import mo_yanxi.flat_set;
 import mo_yanxi.algo;
 
 namespace mo_yanxi::react_flow{
-	export struct manager;
+export struct manager;
 
-	export using progress_type = unsigned;
-	export constexpr progress_type f32_to_progress_scl = std::numeric_limits<unsigned short>::max();
-	export constexpr progress_type invalid_progress = std::numeric_limits<progress_type>::max();
+export using progress_type = unsigned;
+export constexpr progress_type f32_to_progress_scl = std::numeric_limits<unsigned short>::max();
+export constexpr progress_type invalid_progress = std::numeric_limits<progress_type>::max();
 
-	export struct progress_check{
-		bool changed;
-		progress_type progress;
+export struct progress_check{
+	bool changed;
+	progress_type progress;
 
-		constexpr explicit operator bool() const noexcept{
-			return invalid_progress != progress;
-		}
+	constexpr explicit operator bool() const noexcept{
+		return invalid_progress != progress;
+	}
 
-		[[nodiscard]] constexpr float get_f32_progress() const noexcept{
-			return static_cast<float>(progress) / static_cast<float>(f32_to_progress_scl);
-		}
-	};
-
-
-	struct async_task_base{
-		friend manager;
-
-	private:
-		bool check_during_update_{};
-
-	public:
-		[[nodiscard]] async_task_base() = default;
-
-		explicit async_task_base(bool check_during_update)
-			: check_during_update_(check_during_update){
-		}
-
-		virtual ~async_task_base() = default;
-
-		virtual void execute(const manager& manager){
-		}
-
-		virtual void on_finish(manager& manager){
-		}
-
-		virtual node* get_owner_if_node() noexcept{
-			return nullptr;
-		}
-
-		virtual progress_check get_progress() const noexcept{
-			return {};
-		}
-
-		/**
-		 * @brief Called on manager main thread when the async task is under processing
-		 */
-		virtual void on_update_check(manager& manager){
-
-		}
+	[[nodiscard]] constexpr float get_f32_progress() const noexcept{
+		return static_cast<float>(progress) / static_cast<float>(f32_to_progress_scl);
+	}
+};
 
 
-	};
+struct async_task_base{
+	friend manager;
+
+private:
+	bool check_during_update_{};
+
+public:
+	[[nodiscard]] async_task_base() = default;
+
+	explicit async_task_base(bool check_during_update)
+		: check_during_update_(check_during_update){
+	}
+
+	virtual ~async_task_base() = default;
+
+	virtual void execute(const manager& manager){
+	}
+
+	virtual void on_finish(manager& manager){
+	}
+
+	virtual node* get_owner_if_node() noexcept{
+		return nullptr;
+	}
+
+	virtual progress_check get_progress() const noexcept{
+		return {};
+	}
+
+	/**
+	 * @brief Called on manager main thread when the async task is under processing
+	 */
+	virtual void on_update_check(manager& manager){
+	}
+};
 
 
-	struct progressed_async_node_base : async_task_base{
-	private:
-		mutable progress_type last_progress = invalid_progress;
-		std::atomic<progress_type> progress{invalid_progress};
+struct progressed_async_node_base : async_task_base{
+private:
+	mutable progress_type last_progress = invalid_progress;
+	std::atomic<progress_type> progress{invalid_progress};
 
-	public:
-		using async_task_base::async_task_base;
+public:
+	using async_task_base::async_task_base;
 
-		void set_progress_done() noexcept{
-			progress.store(f32_to_progress_scl, std::memory_order_release);
-		}
+	void set_progress_done() noexcept{
+		progress.store(f32_to_progress_scl, std::memory_order_release);
+	}
 
-		void set_progress(float prog) noexcept{
-			progress.store(static_cast<progress_type>(std::clamp(prog, 0.f, 1.f) * static_cast<float>(f32_to_progress_scl)),
-				std::memory_order_release);
-		}
+	void set_progress(float prog) noexcept{
+		progress.store(static_cast<progress_type>(std::clamp(prog, 0.f, 1.f) * static_cast<float>(f32_to_progress_scl)),
+		               std::memory_order_release);
+	}
 
-		void set_progress(unsigned cur, unsigned total) noexcept{
-			progress.store(std::min(cur * f32_to_progress_scl / total, f32_to_progress_scl), std::memory_order_release);
-		}
+	void set_progress(unsigned cur, unsigned total) noexcept{
+		progress.store(std::min(cur * f32_to_progress_scl / total, f32_to_progress_scl), std::memory_order_release);
+	}
 
-		progress_check get_progress() const noexcept override{
-			//it should use relax principally, but consider that someone want to do sync depends on the progress, make it acq rel
-			const auto cur = progress.load(std::memory_order_acquire);
-			const auto last = std::exchange(last_progress, cur);
-			return {cur != last, cur};
-		}
-	};
+	progress_check get_progress() const noexcept override{
+		//it should use relax principally, but consider that someone want to do sync depends on the progress, make it acq rel
+		const auto cur = progress.load(std::memory_order_acquire);
+		const auto last = std::exchange(last_progress, cur);
+		return {cur != last, cur};
+	}
+};
 
-	//TODO allocator?
+//TODO allocator?
 
-	export struct manager_no_async_t{
-	};
+export struct manager_no_async_t{
+};
 
-	export constexpr inline manager_no_async_t manager_no_async{};
+export constexpr inline manager_no_async_t manager_no_async{};
 
 #ifdef __cpp_lib_move_only_function
-	using AsyncFuncType = std::move_only_function<void()>;
+using AsyncFuncType = std::move_only_function<void()>;
 #else
-	using AsyncFuncType = std::function<void()>;
+using AsyncFuncType = std::function<void()>;
 #endif
 
-	//TODO support move?
+//TODO support move?
 
-	export struct manager{
-	private:
-		std::vector<node_pointer> nodes_anonymous_{};
-		std::vector<node*> pulse_subscriber_{};
-		linear_flat_set<std::vector<node*>> expired_nodes_{};
+export struct manager{
+private:
+	std::vector<node_pointer> nodes_anonymous_{};
+	std::vector<node*> pulse_subscriber_{};
+	linear_flat_set<std::vector<node*>> expired_nodes_{};
 
-		using async_task_queue = ccur::mpsc_queue<AsyncFuncType>;
-		async_task_queue pending_received_updates_{};
-		async_task_queue::container_type recycled_queue_container_{};
+	using async_task_queue = ccur::mpsc_queue<AsyncFuncType>;
+	async_task_queue pending_received_updates_{};
+	async_task_queue::container_type recycled_queue_container_{};
 
-		ccur::mpsc_queue<std::unique_ptr<async_task_base>> pending_async_modifiers_{};
-		std::atomic<async_task_base*> under_processing_{};
+	ccur::mpsc_queue<std::unique_ptr<async_task_base>> pending_async_modifiers_{};
+	std::atomic<async_task_base*> under_processing_{};
 
-		//TODO using small vector here?
-		using done_vec_type = std::vector<std::unique_ptr<async_task_base>>;
-		ccur::swmr_double_buffer<done_vec_type> async_done_buffer_{};
-		done_vec_type manager_thread_done_buffer_{};
+	using done_vec_type = std::vector<std::unique_ptr<async_task_base>>;
+	ccur::swmr_double_buffer<done_vec_type> async_done_buffer_{};
+	done_vec_type manager_thread_done_buffer_{};
 
-		std::jthread async_thread_{};
+	std::jthread async_thread_{};
+	bool enable_async_{true};
 
-		template <std::derived_from<node> T, typename... Args>
-		[[nodiscard]] node_pointer make_node(Args&&... args){
-			// return node_pointer{std::in_place_type<T>, std::forward<Args>(args)...};
-			return node_pointer(std::in_place_type<T>, std::forward<Args>(args)...);
+	// 新增：内部提取的懒加载逻辑
+	void ensure_async_thread(){
+		if(enable_async_ && !async_thread_.joinable()){
+			async_thread_ = std::jthread([](std::stop_token stop_token, manager& m){
+				execute_async_tasks(std::move(stop_token), m);
+			}, std::ref(*this));
 		}
-		void process_node(node& node){
-			node.set_manager(*this);
-			if(node.get_propagate_type() == propagate_type::pulse){
-				pulse_subscriber_.push_back(&node);
-			}
-		}
+	}
 
-	public:
-		[[nodiscard]] manager() : async_thread_([](std::stop_token stop_token, manager& manager){
-			execute_async_tasks(std::move(stop_token), manager);
-		}, std::ref(*this)){
-		}
+	template <std::derived_from<node> T, typename... Args>
+	[[nodiscard]] node_pointer make_node(Args&&... args){
+		return node_pointer(std::in_place_type<T>, std::forward<Args>(args)...);
+	}
 
-		[[nodiscard]] explicit manager(manager_no_async_t){
+	void process_node(node& node){
+		node.set_manager(*this);
+		if(node.get_propagate_type() == propagate_type::pulse){
+			pulse_subscriber_.push_back(&node);
 		}
+	}
 
-		std::jthread& get_async_working_thread() noexcept{
-			return async_thread_;
-		}
+public:
+	[[nodiscard]] manager() = default;
 
-		template <std::derived_from<node> T, typename... Args>
-		NODISCARD_ON_ADD T& add_node(Args&&... args){
-			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::forward<Args>(args)...));
-			this->process_node(*ptr);
-			return static_cast<T&>(*ptr);
-		}
+	[[nodiscard]] explicit manager(manager_no_async_t) : enable_async_(false){
+	}
 
-		template <std::derived_from<node> T>
-		NODISCARD_ON_ADD T& add_node(T&& node){
-			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::move(node)));
-			this->process_node(*ptr);
-			return static_cast<T&>(*ptr);
-		}
+	std::jthread& get_async_working_thread() noexcept{
+		ensure_async_thread(); // 请求访问线程时，若尚未启动则触发启动
+		return async_thread_;
+	}
 
-		template <std::derived_from<node> T>
-		NODISCARD_ON_ADD T& add_node(const T& node){
-			auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(node));
-			this->process_node(*ptr);
-			return static_cast<T&>(*ptr);
-		}
+	template <std::derived_from<node> T, typename... Args>
+	NODISCARD_ON_ADD T& add_node(Args&&... args){
+		auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::forward<Args>(args)...));
+		this->process_node(*ptr);
+		return static_cast<T&>(*ptr);
+	}
 
-		void clear_isolated() noexcept{
-			try{
-				for(auto&& node : nodes_anonymous_){
-					if(node->is_isolated()){
-						expired_nodes_.insert(node.get());
-					}
+	template <std::derived_from<node> T>
+	NODISCARD_ON_ADD T& add_node(T&& node){
+		auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::move(node)));
+		this->process_node(*ptr);
+		return static_cast<T&>(*ptr);
+	}
+
+	template <std::derived_from<node> T>
+	NODISCARD_ON_ADD T& add_node(const T& node){
+		auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(node));
+		this->process_node(*ptr);
+		return static_cast<T&>(*ptr);
+	}
+
+	void clear_isolated() noexcept{
+		try{
+			for(auto&& node : nodes_anonymous_){
+				if(node->is_isolated()){
+					expired_nodes_.insert(node.get());
 				}
-			} catch(...){
-				return; //end garbage collection directly
+			}
+		} catch(...){
+			return; //end garbage collection directly
+		}
+	}
+
+	/**
+	 * @brief Called from OTHER thread that need do sth on the main data flow thread.
+	 */
+	template <std::invocable<> Fn>
+		requires (std::move_constructible<std::remove_cvref_t<Fn>>)
+	void push_posted_act(Fn&& fn){
+		pending_received_updates_.emplace(std::forward<Fn>(fn));
+	}
+
+	std::stop_token get_manager_stop_token() noexcept{
+		ensure_async_thread();
+		return async_thread_.get_stop_token();
+	}
+
+	~manager(){
+		if(async_thread_.joinable()){
+			async_thread_.request_stop();
+			pending_async_modifiers_.notify();
+			async_thread_.join();
+		}
+	}
+
+	/**
+	 * @brief 将另一个 manager 的所有状态、节点和任务合并到当前 manager 中。
+	 * 调用此函数会阻塞，直到 other 的异步执行线程完成其当前正在处理的任务。
+	 * 合并过程中会自动过滤并丢弃 other 中已标记为过期的节点及相关任务。
+	 */
+	void merge(manager&& other){
+		if(this == &other){
+			return;
+		}
+
+		// 1. 停止 other 的异步线程（如果已启动）
+		if(other.async_thread_.joinable()){
+			other.async_thread_.request_stop();
+			other.pending_async_modifiers_.notify();
+			other.async_thread_.join();
+		}
+
+		other.async_done_buffer_.load([this](done_vec_type& other_vec){
+			this->manager_thread_done_buffer_.append_range(std::exchange(other_vec, {}) | std::views::as_rvalue);
+		});
+		this->manager_thread_done_buffer_.append_range(
+			std::exchange(other.manager_thread_done_buffer_, {}) | std::views::as_rvalue);
+
+		// 判断是否有需要过滤的过期节点
+		const bool has_expired = !other.expired_nodes_.empty();
+
+		// 3. 转移节点并更新绑定的 manager 引用，同时执行 GC
+		nodes_anonymous_.reserve(nodes_anonymous_.size() + other.nodes_anonymous_.size());
+		for(auto& node_ptr : other.nodes_anonymous_){
+			if(has_expired && other.expired_nodes_.contains(node_ptr.get())){
+				continue; // 抛弃被标记为过期的节点
+			}
+			node_ptr->set_manager(*this);
+			nodes_anonymous_.emplace_back(std::move(node_ptr));
+		}
+		other.nodes_anonymous_.clear();
+
+		// 4. 转移脉冲订阅者，同样过滤垃圾节点
+		pulse_subscriber_.reserve(pulse_subscriber_.size() + other.pulse_subscriber_.size());
+		for(auto* p_node : other.pulse_subscriber_){
+			if(has_expired && other.expired_nodes_.contains(p_node)){
+				continue;
+			}
+			pulse_subscriber_.push_back(p_node);
+		}
+		other.pulse_subscriber_.clear();
+		other.expired_nodes_.clear(); // 垃圾已被直接丢弃，无需并入 this->expired_nodes_
+
+		// 5. 转移挂起的主线程更新任务
+		async_task_queue::container_type temp_received;
+		if(other.pending_received_updates_.swap(temp_received)){
+			for(auto& fn : temp_received){
+				pending_received_updates_.emplace(std::move(fn));
 			}
 		}
 
-		/**
-		 * @brief Called from OTHER thread that need do sth on the main data flow thread.
-		 */
-		template <std::invocable<> Fn>
-			requires (std::move_constructible<std::remove_cvref_t<Fn>>)
-		void push_posted_act(Fn&& fn){
-			pending_received_updates_.emplace(std::forward<Fn>(fn));
-		}
-
-		std::stop_token get_manager_stop_token() const noexcept{
-			return async_thread_.get_stop_token();
-		}
-
-		~manager(){
-			if(async_thread_.joinable()){
-				async_thread_.request_stop();
-				pending_async_modifiers_.notify();
-				async_thread_.join();
-			}
-
-		}
-
-		/**
-		 * @brief 将另一个 manager 的所有状态、节点和任务合并到当前 manager 中。
-		 * 调用此函数会阻塞，直到 other 的异步执行线程完成其当前正在处理的任务。
-		 * 合并过程中会自动过滤并丢弃 other 中已标记为过期的节点及相关任务。
-		 */
-		void merge(manager&& other) {
-			if (this == &other) {
-				return;
-			}
-
-			// 1. 停止 other 的异步线程，确保 other 的状态不再变化
-			if (other.async_thread_.joinable()) {
-				other.async_thread_.request_stop();
-				other.pending_async_modifiers_.notify();
-				other.async_thread_.join();
-			}
-
-			other.async_done_buffer_.load([this](done_vec_type& other_vec) {
-				this->manager_thread_done_buffer_.append_range(std::exchange(other_vec, {}) | std::views::as_rvalue);
-			});
-			this->manager_thread_done_buffer_.append_range(std::exchange(other.manager_thread_done_buffer_, {}) | std::views::as_rvalue);
-
-			// 判断是否有需要过滤的过期节点
-			const bool has_expired = !other.expired_nodes_.empty();
-
-			// 3. 转移节点并更新绑定的 manager 引用，同时执行 GC
-			nodes_anonymous_.reserve(nodes_anonymous_.size() + other.nodes_anonymous_.size());
-			for (auto& node_ptr : other.nodes_anonymous_) {
-				if (has_expired && other.expired_nodes_.contains(node_ptr.get())) {
-					continue; // 抛弃被标记为过期的节点
-				}
-				node_ptr->set_manager(*this);
-				nodes_anonymous_.emplace_back(std::move(node_ptr));
-			}
-			other.nodes_anonymous_.clear();
-
-			// 4. 转移脉冲订阅者，同样过滤垃圾节点
-			pulse_subscriber_.reserve(pulse_subscriber_.size() + other.pulse_subscriber_.size());
-			for (auto* p_node : other.pulse_subscriber_) {
-				if (has_expired && other.expired_nodes_.contains(p_node)) {
+		// 6. 转移挂起的异步修改任务，过滤掉属于过期节点的任务
+		using async_modifier_queue = ccur::mpsc_queue<std::unique_ptr<async_task_base>>;
+		async_modifier_queue::container_type temp_modifiers;
+		if(other.pending_async_modifiers_.swap(temp_modifiers)){
+			for(auto& task : temp_modifiers){
+				if(has_expired && other.expired_nodes_.contains(task->get_owner_if_node())){
 					continue;
 				}
-				pulse_subscriber_.push_back(p_node);
-			}
-			other.pulse_subscriber_.clear();
-			other.expired_nodes_.clear(); // 垃圾已被直接丢弃，无需并入 this->expired_nodes_
-
-			// 5. 转移挂起的主线程更新任务
-			async_task_queue::container_type temp_received;
-			if (other.pending_received_updates_.swap(temp_received)) {
-				for (auto& fn : temp_received) {
-					pending_received_updates_.emplace(std::move(fn));
-				}
-			}
-
-			// 6. 转移挂起的异步修改任务，过滤掉属于过期节点的任务
-			using async_modifier_queue = ccur::mpsc_queue<std::unique_ptr<async_task_base>>;
-			async_modifier_queue::container_type temp_modifiers;
-			if (other.pending_async_modifiers_.swap(temp_modifiers)) {
-				for (auto& task : temp_modifiers) {
-					if (has_expired && other.expired_nodes_.contains(task->get_owner_if_node())) {
-						continue; // 丢弃针对已过期节点的未执行任务
-					}
-					push_task(std::move(task));
-				}
+				push_task(std::move(task)); // 这里的 push_task 会自动判定并懒启动当前 manager 的线程
 			}
 		}
+	}
 
-		void push_task(std::unique_ptr<async_task_base> task){
-			if(async_thread_.joinable()){
-				pending_async_modifiers_.push(std::move(task));
+	void push_task(std::unique_ptr<async_task_base> task){
+		if(enable_async_){
+			ensure_async_thread(); // 懒加载触发点
+			pending_async_modifiers_.push(std::move(task));
+		} else{
+			// manager_no_async 模式退化为同步执行
+			task->execute(*this);
+			finalize_task(*task);
+		}
+	}
+
+	void update(){
+		if(!expired_nodes_.empty()){
+			// 使用提取的条件移除逻辑，一行搞定 GC
+			remove_nodes_by_predicate([this](node* ptr){
+				return expired_nodes_.contains(ptr);
+			});
+			expired_nodes_.clear();
+		}
+
+		for(const auto& pulse_subscriber : pulse_subscriber_){
+			pulse_subscriber->on_pulse_received(*this);
+		}
+
+		if(pending_received_updates_.swap(recycled_queue_container_)){
+			for(auto&& fn : recycled_queue_container_){
+				fn();
+			}
+			recycled_queue_container_.clear();
+		}
+
+		auto cur = under_processing_.load(std::memory_order_acquire);
+		if(cur && cur->check_during_update_) cur->on_update_check(*this);
+
+		{
+			async_done_buffer_.load([&](done_vec_type& vec){
+				std::ranges::swap(manager_thread_done_buffer_, vec);
+			});
+
+			for(auto&& task_base : manager_thread_done_buffer_){
+				finalize_task(*task_base); // 统一调用提取的收尾逻辑
+			}
+			manager_thread_done_buffer_.clear();
+		}
+	}
+
+	bool erase_node(node& n) noexcept
+	try{
+		//TODO cancel n's async task?
+		return expired_nodes_.insert(std::addressof(n));
+	} catch(const std::bad_alloc&){
+		// 在异常 fallback 路径中，复用统一移除逻辑
+		return remove_nodes_by_predicate([&n](node* ptr){
+			return ptr == &n;
+		});
+	}
+
+private:
+	// ================= 新增的提取逻辑 ================= //
+
+	/**
+	 * @brief 提取出的：处理 async_task 结束与检查的通用逻辑
+	 */
+	void finalize_task(async_task_base& task){
+		task.on_finish(*this);
+		if(task.check_during_update_){
+			task.on_update_check(*this);
+		}
+	}
+
+	/**
+	 * @brief 提取出的：基于谓词，统一清理挂起任务、脉冲订阅和匿名节点列表中的目标
+	 * @return 返回是否从匿名节点列表 (nodes_anonymous_) 中成功移除了元素
+	 */
+	template <typename Predicate>
+	bool remove_nodes_by_predicate(Predicate&& is_target){
+		pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
+			return is_target(ptr->get_owner_if_node());
+		});
+		algo::erase_unique_if_unstable(pulse_subscriber_, [&](node* ptr){
+			return is_target(ptr);
+		});
+		return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
+			return is_target(ptr.get());
+		});
+	}
+
+	static void execute_async_tasks(std::stop_token stop_token, manager& manager){
+		while(!stop_token.stop_requested()){
+			auto&& task = manager.pending_async_modifiers_.consume([&stop_token]{
+				return stop_token.stop_requested();
+			});
+
+			if(task){
+				manager.under_processing_.store(task.value().get(), std::memory_order_release);
+				task.value()->execute(manager);
+				manager.under_processing_.store(nullptr, std::memory_order_release);
+
+				manager.async_done_buffer_.modify([&](done_vec_type& vec){
+					vec.push_back(std::move(task.value()));
+				});
 			} else{
-				task->execute(*this);
-				finalize_task(*task); // 统一调用提取的收尾逻辑
+				return;
 			}
 		}
-
-		void update(){
-			if(!expired_nodes_.empty()){
-				// 使用提取的条件移除逻辑，一行搞定 GC
-				remove_nodes_by_predicate([this](node* ptr){
-					return expired_nodes_.contains(ptr);
-				});
-				expired_nodes_.clear();
-			}
-
-			for(const auto& pulse_subscriber : pulse_subscriber_){
-				pulse_subscriber->on_pulse_received(*this);
-			}
-
-			if(pending_received_updates_.swap(recycled_queue_container_)){
-				for(auto&& fn : recycled_queue_container_){
-					fn();
-				}
-				recycled_queue_container_.clear();
-			}
-
-			auto cur = under_processing_.load(std::memory_order_acquire);
-			if(cur && cur->check_during_update_)cur->on_update_check(*this);
-
-			{
-				async_done_buffer_.load([&](done_vec_type& vec){
-					std::ranges::swap(manager_thread_done_buffer_, vec);
-				});
-
-				for(auto&& task_base : manager_thread_done_buffer_){
-					finalize_task(*task_base); // 统一调用提取的收尾逻辑
-				}
-				manager_thread_done_buffer_.clear();
-			}
-		}
-
-		bool erase_node(node& n) noexcept
-		try{
-			//TODO cancel n's async task?
-			return expired_nodes_.insert(std::addressof(n));
-		} catch(const std::bad_alloc&){
-			// 在异常 fallback 路径中，复用统一移除逻辑
-			return remove_nodes_by_predicate([&n](node* ptr){
-				return ptr == &n;
-			});
-		}
-
-	private:
-		// ================= 新增的提取逻辑 ================= //
-
-		/**
-		 * @brief 提取出的：处理 async_task 结束与检查的通用逻辑
-		 */
-		void finalize_task(async_task_base& task) {
-			task.on_finish(*this);
-			if(task.check_during_update_){
-				task.on_update_check(*this);
-			}
-		}
-
-		/**
-		 * @brief 提取出的：基于谓词，统一清理挂起任务、脉冲订阅和匿名节点列表中的目标
-		 * @return 返回是否从匿名节点列表 (nodes_anonymous_) 中成功移除了元素
-		 */
-		template <typename Predicate>
-		bool remove_nodes_by_predicate(Predicate&& is_target) {
-			pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
-				return is_target(ptr->get_owner_if_node());
-			});
-			algo::erase_unique_if_unstable(pulse_subscriber_, [&](node* ptr){
-				return is_target(ptr);
-			});
-			return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
-				return is_target(ptr.get());
-			});
-		}
-
-		static void execute_async_tasks(std::stop_token stop_token, manager& manager){
-			while(!stop_token.stop_requested()){
-				auto&& task = manager.pending_async_modifiers_.consume([&stop_token]{
-					return stop_token.stop_requested();
-				});
-
-				if(task){
-					manager.under_processing_.store(task.value().get(), std::memory_order_release);
-					task.value()->execute(manager);
-					manager.under_processing_.store(nullptr, std::memory_order_release);
-
-					manager.async_done_buffer_.modify([&](done_vec_type& vec){
-						vec.push_back(std::move(task.value()));
-					});
-
-				} else{
-					return;
-				}
-			}
-		}
-	};
+	}
+};
 }
