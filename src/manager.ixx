@@ -195,22 +195,6 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
-		bool erase_node(node& n) noexcept
-		try{
-			//TODO cancel n's async task?
-
-			return expired_nodes_.insert(std::addressof(n));
-		} catch(const std::bad_alloc&){
-			pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
-				return ptr->get_owner_if_node() == &n;
-			});
-			algo::erase_unique_unstable(pulse_subscriber_, &n);
-			return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
-				return ptr.get() == &n;
-			});
-		}
-
-
 		/**
 		 * @brief Called from OTHER thread that need do sth on the main data flow thread.
 		 */
@@ -218,69 +202,6 @@ namespace mo_yanxi::react_flow{
 			requires (std::move_constructible<std::remove_cvref_t<Fn>>)
 		void push_posted_act(Fn&& fn){
 			pending_received_updates_.emplace(std::forward<Fn>(fn));
-		}
-
-		void push_task(std::unique_ptr<async_task_base> task){
-			if(async_thread_.joinable()){
-				pending_async_modifiers_.push(std::move(task));
-			} else{
-				task->execute(*this);
-				task->on_finish(*this);
-
-				if(task->check_during_update_){
-					//should it check before finish?
-					task->on_update_check(*this);
-				}
-			}
-		}
-
-		void update(){
-			if(!expired_nodes_.empty()){
-				pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
-					return expired_nodes_.contains(ptr->get_owner_if_node());
-				});
-				algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
-					return expired_nodes_.contains(ptr.get());
-				});
-				algo::erase_unique_if_unstable(pulse_subscriber_, [&](node* ptr){
-					return expired_nodes_.contains(ptr);
-				});
-
-				expired_nodes_.clear();
-			}
-
-			for(const auto& pulse_subscriber : pulse_subscriber_){
-				pulse_subscriber->on_pulse_received(*this);
-			}
-
-			if(pending_received_updates_.swap(recycled_queue_container_)){
-				for(auto&& fn : recycled_queue_container_){
-					fn();
-				}
-				recycled_queue_container_.clear();
-			}
-
-
-			auto cur = under_processing_.load(std::memory_order_acquire);
-			if(cur && cur->check_during_update_)cur->on_update_check(*this);
-
-
-			{
-
-				async_done_buffer_.load([&](done_vec_type& vec){
-					std::ranges::swap(manager_thread_done_buffer_, vec);
-				});
-
-				for(auto&& task_base : manager_thread_done_buffer_){
-					task_base->on_finish(*this);
-
-					if(task_base->check_during_update_){
-						//should it check before finish?
-						task_base->on_update_check(*this);
-					}
-				}
-				manager_thread_done_buffer_.clear();
-			}
 		}
 
 		std::stop_token get_manager_stop_token() const noexcept{
@@ -296,7 +217,159 @@ namespace mo_yanxi::react_flow{
 
 		}
 
+		/**
+		 * @brief 将另一个 manager 的所有状态、节点和任务合并到当前 manager 中。
+		 * 调用此函数会阻塞，直到 other 的异步执行线程完成其当前正在处理的任务。
+		 * 合并过程中会自动过滤并丢弃 other 中已标记为过期的节点及相关任务。
+		 */
+		void merge(manager&& other) {
+			if (this == &other) {
+				return;
+			}
+
+			// 1. 停止 other 的异步线程，确保 other 的状态不再变化
+			if (other.async_thread_.joinable()) {
+				other.async_thread_.request_stop();
+				other.pending_async_modifiers_.notify();
+				other.async_thread_.join();
+			}
+
+			other.async_done_buffer_.load([this](done_vec_type& other_vec) {
+				this->manager_thread_done_buffer_.append_range(std::exchange(other_vec, {}) | std::views::as_rvalue);
+			});
+			this->manager_thread_done_buffer_.append_range(std::exchange(other.manager_thread_done_buffer_, {}) | std::views::as_rvalue);
+
+			// 判断是否有需要过滤的过期节点
+			const bool has_expired = !other.expired_nodes_.empty();
+
+			// 3. 转移节点并更新绑定的 manager 引用，同时执行 GC
+			nodes_anonymous_.reserve(nodes_anonymous_.size() + other.nodes_anonymous_.size());
+			for (auto& node_ptr : other.nodes_anonymous_) {
+				if (has_expired && other.expired_nodes_.contains(node_ptr.get())) {
+					continue; // 抛弃被标记为过期的节点
+				}
+				node_ptr->set_manager(*this);
+				nodes_anonymous_.emplace_back(std::move(node_ptr));
+			}
+			other.nodes_anonymous_.clear();
+
+			// 4. 转移脉冲订阅者，同样过滤垃圾节点
+			pulse_subscriber_.reserve(pulse_subscriber_.size() + other.pulse_subscriber_.size());
+			for (auto* p_node : other.pulse_subscriber_) {
+				if (has_expired && other.expired_nodes_.contains(p_node)) {
+					continue;
+				}
+				pulse_subscriber_.push_back(p_node);
+			}
+			other.pulse_subscriber_.clear();
+			other.expired_nodes_.clear(); // 垃圾已被直接丢弃，无需并入 this->expired_nodes_
+
+			// 5. 转移挂起的主线程更新任务
+			async_task_queue::container_type temp_received;
+			if (other.pending_received_updates_.swap(temp_received)) {
+				for (auto& fn : temp_received) {
+					pending_received_updates_.emplace(std::move(fn));
+				}
+			}
+
+			// 6. 转移挂起的异步修改任务，过滤掉属于过期节点的任务
+			using async_modifier_queue = ccur::mpsc_queue<std::unique_ptr<async_task_base>>;
+			async_modifier_queue::container_type temp_modifiers;
+			if (other.pending_async_modifiers_.swap(temp_modifiers)) {
+				for (auto& task : temp_modifiers) {
+					if (has_expired && other.expired_nodes_.contains(task->get_owner_if_node())) {
+						continue; // 丢弃针对已过期节点的未执行任务
+					}
+					push_task(std::move(task));
+				}
+			}
+		}
+
+		void push_task(std::unique_ptr<async_task_base> task){
+			if(async_thread_.joinable()){
+				pending_async_modifiers_.push(std::move(task));
+			} else{
+				task->execute(*this);
+				finalize_task(*task); // 统一调用提取的收尾逻辑
+			}
+		}
+
+		void update(){
+			if(!expired_nodes_.empty()){
+				// 使用提取的条件移除逻辑，一行搞定 GC
+				remove_nodes_by_predicate([this](node* ptr){
+					return expired_nodes_.contains(ptr);
+				});
+				expired_nodes_.clear();
+			}
+
+			for(const auto& pulse_subscriber : pulse_subscriber_){
+				pulse_subscriber->on_pulse_received(*this);
+			}
+
+			if(pending_received_updates_.swap(recycled_queue_container_)){
+				for(auto&& fn : recycled_queue_container_){
+					fn();
+				}
+				recycled_queue_container_.clear();
+			}
+
+			auto cur = under_processing_.load(std::memory_order_acquire);
+			if(cur && cur->check_during_update_)cur->on_update_check(*this);
+
+			{
+				async_done_buffer_.load([&](done_vec_type& vec){
+					std::ranges::swap(manager_thread_done_buffer_, vec);
+				});
+
+				for(auto&& task_base : manager_thread_done_buffer_){
+					finalize_task(*task_base); // 统一调用提取的收尾逻辑
+				}
+				manager_thread_done_buffer_.clear();
+			}
+		}
+
+		bool erase_node(node& n) noexcept
+		try{
+			//TODO cancel n's async task?
+			return expired_nodes_.insert(std::addressof(n));
+		} catch(const std::bad_alloc&){
+			// 在异常 fallback 路径中，复用统一移除逻辑
+			return remove_nodes_by_predicate([&n](node* ptr){
+				return ptr == &n;
+			});
+		}
+
 	private:
+		// ================= 新增的提取逻辑 ================= //
+
+		/**
+		 * @brief 提取出的：处理 async_task 结束与检查的通用逻辑
+		 */
+		void finalize_task(async_task_base& task) {
+			task.on_finish(*this);
+			if(task.check_during_update_){
+				task.on_update_check(*this);
+			}
+		}
+
+		/**
+		 * @brief 提取出的：基于谓词，统一清理挂起任务、脉冲订阅和匿名节点列表中的目标
+		 * @return 返回是否从匿名节点列表 (nodes_anonymous_) 中成功移除了元素
+		 */
+		template <typename Predicate>
+		bool remove_nodes_by_predicate(Predicate&& is_target) {
+			pending_async_modifiers_.erase_if([&](const std::unique_ptr<async_task_base>& ptr){
+				return is_target(ptr->get_owner_if_node());
+			});
+			algo::erase_unique_if_unstable(pulse_subscriber_, [&](node* ptr){
+				return is_target(ptr);
+			});
+			return algo::erase_unique_if_unstable(nodes_anonymous_, [&](const node_pointer& ptr){
+				return is_target(ptr.get());
+			});
+		}
+
 		static void execute_async_tasks(std::stop_token stop_token, manager& manager){
 			while(!stop_token.stop_requested()){
 				auto&& task = manager.pending_async_modifiers_.consume([&stop_token]{
