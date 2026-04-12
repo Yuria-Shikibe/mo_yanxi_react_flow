@@ -48,7 +48,7 @@ public:
 
 	virtual ~async_task_base() = default;
 
-	virtual void execute(const manager& manager){
+	virtual void execute(manager& manager){
 	}
 
 	virtual void on_finish(manager& manager){

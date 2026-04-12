@@ -199,7 +199,7 @@ namespace mo_yanxi::react_flow{
 		}
 
 	private:
-		void execute(const manager& manager) override{
+		void execute(manager& manager) override{
 			result_ = get().apply(async_context{stop_token_, manager.get_manager_stop_token(), this}, std::move(arguments_));
 		}
 	};
