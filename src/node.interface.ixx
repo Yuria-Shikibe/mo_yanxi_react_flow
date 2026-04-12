@@ -10,9 +10,9 @@ module;
 #define MO_YANXI_DATA_FLOW_ENABLE_RING_CHECK 1
 #endif
 
-#ifndef MO_YANXI_DATA_FLOW_DISABLE_THREAD_CHECK
-#define THREAD_CHECK
-#endif
+// #ifndef MO_YANXI_DATA_FLOW_DISABLE_THREAD_CHECK
+// #define THREAD_CHECK
+// #endif
 
 #include <mo_yanxi/adapted_attributes.hpp>
 
@@ -223,9 +223,9 @@ namespace mo_yanxi::react_flow{
 	private:
 		unsigned reference_count_{};
 
-#ifdef THREAD_CHECK
-		std::thread::id created_thread_id_{std::this_thread::get_id()};
-#endif
+// #ifdef THREAD_CHECK
+// 		std::thread::id created_thread_id_{std::this_thread::get_id()};
+// #endif
 
 
 	protected:
@@ -242,35 +242,35 @@ namespace mo_yanxi::react_flow{
 		virtual ~node() = default;
 
 		void incr_ref() noexcept{
-#ifdef THREAD_CHECK
-			if(created_thread_id_ != std::this_thread::get_id()){
-				std::println(std::cerr, "operate reference count on a wrong thread");
-				std::terminate();
-			}
-#endif
+// #ifdef THREAD_CHECK
+// 			if(created_thread_id_ != std::this_thread::get_id()){
+// 				std::println(std::cerr, "operate reference count on a wrong thread");
+// 				std::terminate();
+// 			}
+// #endif
 
 			++reference_count_;
 		}
 
 		bool decr_ref() noexcept{
-#ifdef THREAD_CHECK
-			if(created_thread_id_ != std::this_thread::get_id()){
-				std::println(std::cerr, "operate reference count on a wrong thread");
-				std::terminate();
-			}
-#endif
+// #ifdef THREAD_CHECK
+// 			if(created_thread_id_ != std::this_thread::get_id()){
+// 				std::println(std::cerr, "operate reference count on a wrong thread");
+// 				std::terminate();
+// 			}
+// #endif
 
 			--reference_count_;
 			return reference_count_ == 0;
 		}
 
 		bool is_droppable() const noexcept{
-#ifdef THREAD_CHECK
-			if(created_thread_id_ != std::this_thread::get_id()){
-				std::println(std::cerr, "operate reference count on a wrong thread");
-				std::terminate();
-			}
-#endif
+// #ifdef THREAD_CHECK
+// 			if(created_thread_id_ != std::this_thread::get_id()){
+// 				std::println(std::cerr, "operate reference count on a wrong thread");
+// 				std::terminate();
+// 			}
+// #endif
 
 			return reference_count_ == 0;
 		}
