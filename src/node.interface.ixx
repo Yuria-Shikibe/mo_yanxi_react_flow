@@ -481,28 +481,40 @@ namespace mo_yanxi::react_flow{
 	export
 	template <std::derived_from<node> T>
 	struct node_holder{
+	private:
+		void clear() noexcept {
+			node.disconnect_self_from_context();
+
+			if(!static_cast<struct node&>(node).decr_ref()){
+				std::println(std::cerr, "holder must be the last to release the node");
+				std::terminate();
+			}
+		}
+	public:
 		T node;
 
 		~node_holder(){
-			node.disconnect_self_from_context();
+			clear();
 		}
 
-		node_holder(const node_holder& other) = delete;
+		// node_holder(const node_holder& other) = delete;
+		//
+		// node_holder(node_holder&& other) noexcept
+		// 	: node(std::exchange(other.node, {})){
+		// }
+		//
+		// node_holder& operator=(const node_holder& other) = delete;
+		//
+		// node_holder& operator=(node_holder&& other) noexcept{
+		// 	if(this == &other) return *this;
+		// 	clear();
+		// 	node = std::exchange(other.node, {});
+		// 	return *this;
+		// }
 
-		node_holder(node_holder&& other) noexcept
-			: node(std::exchange(other.node, {})){
+		node_holder(){
+			static_cast<struct node&>(node).incr_ref();
 		}
-
-		node_holder& operator=(const node_holder& other) = delete;
-
-		node_holder& operator=(node_holder&& other) noexcept{
-			if(this == &other) return *this;
-			static_cast<struct node&>(node).decr_ref();
-			node = std::exchange(other.node, {});
-			return *this;
-		}
-
-		node_holder() = default;
 
 		template <typename ...Args>
 			requires (std::constructible_from<T, Args&&...>)

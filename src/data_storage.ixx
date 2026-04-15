@@ -635,7 +635,6 @@ namespace mo_yanxi::react_flow{
 	};
 
 
-	export
 	template <typename T>
 	struct optional_val<T, true>{
 		using value_type = T;
