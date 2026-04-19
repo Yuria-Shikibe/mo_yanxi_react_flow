@@ -874,4 +874,33 @@ namespace mo_yanxi::react_flow{
 		}
 	};
 
+export
+template <typename T>
+struct exchange_on_move{
+	T value;
+
+	[[nodiscard]] exchange_on_move() = default;
+
+	[[nodiscard]] exchange_on_move(const T& value)
+		: value(value){
+	}
+
+	exchange_on_move(const exchange_on_move& other) noexcept = default;
+
+	exchange_on_move(exchange_on_move&& other) noexcept
+		: value{std::exchange(other.value, {})}{
+	}
+
+	exchange_on_move& operator=(const exchange_on_move& other) noexcept = default;
+
+	exchange_on_move& operator=(const T& other) noexcept{
+		value = other;
+		return *this;
+	}
+
+	exchange_on_move& operator=(exchange_on_move&& other) noexcept{
+		value = std::exchange(other.value, {});
+		return *this;
+	}
+};
 }

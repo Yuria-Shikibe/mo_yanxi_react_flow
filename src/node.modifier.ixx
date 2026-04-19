@@ -58,7 +58,7 @@ namespace mo_yanxi::react_flow{
 		static constexpr std::array<bool, argument_count> quiet_map{descriptor_trait<Args>::no_push...};
 
 	private:
-		std::array<raw_node_ptr, argument_count> parents_{};
+		std::array<tracked_parent_ptr, argument_count> parents_{};
 		successor_list successors_{};
 
 	protected:
@@ -79,7 +79,9 @@ namespace mo_yanxi::react_flow{
 		modifier_base& operator=(modifier_base&& other) noexcept = default;
 
 		[[nodiscard]] bool is_isolated() const noexcept final{
-			return std::ranges::none_of(parents_, std::identity{}) && successors_.empty();
+			return std::ranges::none_of(parents_, [](const tracked_parent_ptr& p){
+				return static_cast<bool>(p);
+			}) && successors_.empty();
 		}
 
 		[[nodiscard]] std::span<const data_type_index> get_in_socket_type_index() const noexcept final{
@@ -88,9 +90,9 @@ namespace mo_yanxi::react_flow{
 
 		void disconnect_self_from_context() noexcept final{
 			for(std::size_t i = 0; i < parents_.size(); ++i){
-				if(raw_node_ptr& ptr = parents_[i]){
+				if(raw_node_ptr ptr = parents_[i].get()){
 					ptr->erase_successors_single_edge(i, *this);
-					ptr = nullptr;
+					parents_[i].reset(nullptr);
 				}
 			}
 			for(const auto& successor : successors_){
@@ -99,7 +101,7 @@ namespace mo_yanxi::react_flow{
 			successors_.clear();
 		}
 
-		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const tracked_parent_ptr> get_inputs() const noexcept final{
 			return parents_;
 		}
 
@@ -108,8 +110,23 @@ namespace mo_yanxi::react_flow{
 		}
 
 	protected:
+		void connect_predecessor_impl(std::size_t slot, node& prev) final{
+			if(auto ptr = parents_[slot].get()){
+				ptr->erase_successors_single_edge(slot, *this);
+			}
+			parents_[slot].reset(std::addressof(prev));
+		}
+
+		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
+			if(parents_[slot].get() == &prev){
+				parents_[slot].reset(nullptr);
+			}
+		}
+
 		bool connect_successors_impl(std::size_t slot, node& post) final{
-			if(auto& ptr = post.get_inputs()[slot]){
+			if(auto&& ptr = post.get_inputs()[slot]){
+				// 彻底断开目标节点旧有的连接双向关系
+				ptr->erase_successors_single_edge(slot, post);
 				post.erase_predecessor_single_edge(slot, *ptr);
 			}
 			return try_insert(successors_, slot, post);
@@ -119,18 +136,7 @@ namespace mo_yanxi::react_flow{
 			return try_erase(successors_, slot, post);
 		}
 
-		void connect_predecessor_impl(std::size_t slot, node& prev) final{
-			if(parents_[slot]){
-				parents_[slot]->erase_successors_single_edge(slot, *this);
-			}
-			parents_[slot] = std::addressof(prev);
-		}
 
-		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
-			if(parents_[slot] == &prev){
-				parents_[slot] = {};
-			}
-		}
 #pragma endregion
 
 	public:
@@ -152,7 +158,7 @@ namespace mo_yanxi::react_flow{
 			} else{
 				data_state states{};
 
-				for(const raw_node_ptr& p : parents_){
+				for(const tracked_parent_ptr& p : parents_){
 					update_state_enum(states, p->get_data_state());
 				}
 

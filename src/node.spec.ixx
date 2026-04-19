@@ -76,13 +76,13 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 		bool connect_successors_impl(const std::size_t slot, node& post) final{
-			if(auto& ptr = post.get_inputs()[slot]){
+			if(auto&& ptr = post.get_inputs()[slot]){
+				ptr->erase_successors_single_edge(slot, post);
 				post.erase_predecessor_single_edge(slot, *ptr);
 			}
 			return try_insert(successors, slot, post);
 		}
 
-	protected:
 		successor_list successors{};
 
 		void on_push(std::size_t target_index, data_carrier_obj&& in_data) override{
@@ -102,7 +102,7 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		static constexpr data_type_index node_data_type_index = unstable_type_identity_of<T>();
-		raw_node_ptr parent{};
+		tracked_parent_ptr parent{};
 
 	protected:
 		[[nodiscard]] explicit terminal(propagate_type data_propagate_type)
@@ -124,7 +124,7 @@ namespace mo_yanxi::react_flow{
 			return false;
 		}
 
-		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const tracked_parent_ptr> get_inputs() const noexcept final{
 			return {&parent, 1};
 		}
 
@@ -145,13 +145,6 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
-		void disconnect_self_from_context() noexcept final{
-			if(parent){
-				parent->erase_successors_single_edge(0, *this);
-				parent = nullptr;
-			}
-		}
-
 		request_pass_handle<T> request_raw(const bool allow_expired) override{
 			assert(parent != nullptr);
 			return node_type_cast<T>(*parent).request_raw(allow_expired);
@@ -164,23 +157,29 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
+
+		void disconnect_self_from_context() noexcept final{
+			if(parent){
+				parent->erase_successors_single_edge(0, *this);
+				parent.reset(nullptr);
+			}
+		}
+
+
 		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
 			assert(slot == 0);
-			if(parent == std::addressof(prev)){
-				parent = {};
+			if(parent.get() == std::addressof(prev)){
+				parent.reset(nullptr);
 			}
 		}
 
 	protected:
 		void connect_predecessor_impl(const std::size_t slot, node& prev) final{
 			assert(slot == 0);
-			if(parent){
-				const auto rng = parent->get_outputs();
-				const auto idx = std::ranges::distance(rng.begin(),
-					std::ranges::find(rng, this, &successor_entry::get));
-				parent->erase_successors_single_edge(idx, *this);
+			if(auto ptr = parent.get()){
+				ptr->erase_successors_single_edge(0, *this);
 			}
-			parent = std::addressof(prev);
+			parent.reset(std::addressof(prev));
 		}
 
 
@@ -246,11 +245,11 @@ namespace mo_yanxi::react_flow{
 		bool pull_and_push(bool allow_expired) override {
 			if(!this->parent) return false;
 
-			// 强制调用基类的 request_raw，避免和本类的缓存更新逻辑产生递归
+
 			if(auto rst = this->terminal<T>::request_raw(allow_expired)){
 				this->data_pending_state_ = data_pending_state::done;
 
-				// 更新自身缓存并触发回调
+
 				this->cache_ = std::move(rst).value().get();
 				data_carrier<T> carrier{this->cache_};
 				this->on_update(carrier);
@@ -343,7 +342,7 @@ public:
     	data_ = value;
     }
 
-    // 隐藏 provider_general<O> 中的 update_value，因为我们想要更新的是内部状态 T
+
     void update_value(T&& value) {
         data_ = std::move(value);
         on_update();
@@ -388,13 +387,13 @@ public:
     }
 
     request_pass_handle<O> request_raw(bool allow_expired) override {
-        // 由于 O 可能是由转换器即时生成的临时值，这里建议使用支持传值的 request handle 构建函数
-        // 如果您的框架内没有 expected_val，可能需要根据具体 util 进行微调
+
+
         return react_flow::make_request_handle_expected<O>(get_output_cache(), false);
     }
 
 protected:
-    // 注意：尽管对外是 O，但如果通过 untyped interface 被 push，我们依然假设推入的是基础类型 T
+
     void on_push(std::size_t, data_carrier_obj&& in_data) override {
         auto& storage = data_carrier_cast<T>(in_data);
         data_ = storage.get();
