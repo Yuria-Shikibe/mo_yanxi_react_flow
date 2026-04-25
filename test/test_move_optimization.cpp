@@ -70,6 +70,19 @@ public:
     }
 };
 
+struct StringListener : terminal<std::string> {
+    bool updated = false;
+    std::string last_value;
+
+    explicit StringListener(propagate_type pb)
+        : terminal<std::string>(pb) {}
+
+    void on_update(data_carrier<std::string>& data) override {
+        updated = true;
+        last_value = data.get_ref_view();
+    }
+};
+
 TEST(MoveOptimizationTest, SingleConsumer_ViaTransformer) {
     manager mgr;
     auto& p = mgr.add_node<provider_cached<MoveTracker>>();
@@ -155,4 +168,39 @@ TEST(MoveOptimizationTest, MultipleConsumers_ViaTransformer) {
 
     // Total Moves: 1(update) + 1(ret) + 1(storage) + 1(get) = 4.
     EXPECT_GE(MoveTracker::move_count, 3);
+}
+
+TEST(MoveOptimizationTest, ProviderGeneralKeepsBorrowedCarrierAlive) {
+    manager mgr;
+    auto& provider = mgr.add_node<provider_general<std::string>>();
+    auto& listener = mgr.add_node<StringListener>(propagate_type::eager);
+
+    provider.connect_successor(listener);
+
+    std::string source = "payload";
+    data_carrier<std::string> carrier(source);
+
+    provider.update_value(carrier);
+
+    EXPECT_TRUE(listener.updated);
+    EXPECT_EQ(listener.last_value, "payload");
+    EXPECT_FALSE(carrier.is_empty());
+    EXPECT_EQ(carrier.get_copy(), "payload");
+}
+
+TEST(MoveOptimizationTest, ProviderGeneralConsumesRvalueCarrier) {
+    manager mgr;
+    auto& provider = mgr.add_node<provider_general<std::string>>();
+    auto& listener = mgr.add_node<StringListener>(propagate_type::eager);
+
+    provider.connect_successor(listener);
+
+    data_carrier<std::string> carrier(std::string("payload"));
+    ASSERT_FALSE(carrier.is_empty());
+
+    provider.update_value(std::move(carrier));
+
+    EXPECT_TRUE(listener.updated);
+    EXPECT_EQ(listener.last_value, "payload");
+    EXPECT_TRUE(carrier.is_empty());
 }

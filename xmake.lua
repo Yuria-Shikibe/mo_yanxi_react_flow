@@ -1,7 +1,7 @@
 add_rules("mode.debug", "mode.release")
 set_encodings("utf-8")
 set_project("mo_yanxi.react_flow")
-set_version("1.0")
+set_version("0.1.0")
 
 option("spec_mo_yanxi_utility_path")
     set_description("External repository path (checks for xmake.lua)")
@@ -46,8 +46,13 @@ local util_path = get_config("spec_mo_yanxi_utility_path")
 local has_path_spec = false
 
 if util_path and #util_path > 0 then
-    includes(util_path)
-    has_path_spec = true
+    local util_xmake = path.join(util_path, "xmake.lua")
+    if os.isfile(util_xmake) then
+        includes(util_xmake)
+        has_path_spec = true
+    else
+        wprint("spec_mo_yanxi_utility_path does not contain xmake.lua: %s", util_xmake)
+    end
 end
 
 if (not has_path_spec) then
@@ -87,16 +92,6 @@ rule("project.common")
     end)
 rule_end()
 
--- 2. 二进制规则：适用于 Test, Example, Bench
---    自动依赖主库，并设置为二进制类型
-rule("project.binary")
-    add_deps("project.common")
-    on_load(function (target)
-        target:set("kind", "binary")
-        target:add("deps", "mo_yanxi.react_flow", {public = true})
-    end)
-rule_end()
-
 -- 3. 优化规则：适用于 Example, Bench
 --    开启最高优化并保留调试符号
 rule("project.optimized")
@@ -113,7 +108,8 @@ rule_end()
 
 -- 主库 Target
 target("mo_yanxi.react_flow")
-    set_kind("object")
+    set_kind("moduleonly")
+    set_languages("c++23")
     add_rules("project.common")
     add_files("src/**.ixx", {public = true})
 
@@ -125,22 +121,29 @@ target("mo_yanxi.react_flow")
 
 target_end()
 
+
 -- 测试 Target
 target("mo_yanxi.react_flow.test")
-    add_rules("project.binary") -- 自动继承 common 和 main lib 依赖
+    set_kind("binary")
+    set_languages("c++23")
 
-    set_enabled(has_config("add_test"))
+    --set_enabled(has_config("add_test"))
+    set_default(has_config("add_test"))
 
+    add_deps("mo_yanxi.react_flow", {public = true})
     add_packages("gtest")
     add_files("test/**.cpp")
 target_end()
 
 -- 示例 Target
 target("mo_yanxi.react_flow.example")
-    add_rules("project.binary")
+    set_kind("binary")
+    set_languages("c++23")
 
-    set_enabled(has_config("add_examples"))
-    set_default(false)
+    add_deps("mo_yanxi.react_flow", {public = true})
+    --
+    --set_enabled(has_config("add_examples"))
+    set_default(has_config("add_examples"))
 
     add_files("examples/**.cpp")
     add_files("examples/**.ixx")
@@ -148,10 +151,14 @@ target_end()
 
 -- 基准测试 Target
 target("mo_yanxi.react_flow.benchmark")
-    add_rules("project.binary", "project.optimized")
+    set_kind("binary")
+    set_languages("c++23")
+
+    add_rules("project.optimized")
+    add_deps("mo_yanxi.react_flow", {public = true})
 
     set_enabled(has_config("add_benchmark"))
-    set_default(false)
+    set_default(has_config("add_benchmark"))
 
     add_packages("benchmark")
     add_files("benchmark/**.cpp")

@@ -55,9 +55,9 @@ public:
 	}
 
 	template <typename T>
-		requires std::derived_from<std::decay_t<T>, node>
+		requires (std::derived_from<std::decay_t<T>, node> && !std::is_lvalue_reference_v<T> && std::constructible_from<std::decay_t<T>, T&&>)
 	constexpr inline explicit(false) node_pointer(T&& val)
-		: node_(new T(std::forward<T>(val))){
+		: node_(new std::decay_t<T>(std::forward<T>(val))){
 		incr_();
 	}
 
@@ -77,6 +77,10 @@ public:
 		if(node_) decr_();
 		node_ = p;
 		if(node_) incr_();
+	}
+
+	constexpr inline void rebind_without_ref(node* p) noexcept{
+		node_ = p;
 	}
 
 	constexpr inline node_pointer(const node_pointer& other) noexcept
@@ -505,6 +509,12 @@ public:
 	virtual void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept{
 	}
 
+	virtual void rebind_predecessor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept{
+	}
+
+	virtual void rebind_successor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept{
+	}
+
 protected:
 	//TODO disconnected conflicted
 	virtual bool connect_successors_impl(std::size_t slot, node& post){
@@ -593,6 +603,89 @@ public:
 		requires (std::constructible_from<T, Args&&...>)
 	explicit(false) node_holder(Args&&... args) : node(std::forward<Args>(args)...){
 		static_cast<struct node&>(node).incr_ref();
+	}
+
+
+	template <typename S>
+	auto* operator->(this S& self) noexcept{
+		return &self.node;
+	}
+
+	template <typename S>
+	auto&& operator*(this S&& self) noexcept{
+		return std::forward_like<S>(self.node);
+	}
+};
+
+export
+template <std::derived_from<node> T>
+struct node_holder_portable{
+private:
+	static void rebind_neighbors(node& target, raw_node_ptr old_address) noexcept{
+		if(const auto inputs = target.get_inputs(); !inputs.empty()){
+			for(std::size_t i = 0; i < inputs.size(); ++i){
+				target.rebind_predecessor_reference(i, old_address, std::addressof(target));
+				if(raw_node_ptr input = inputs[i].get()){
+					input->rebind_successor_reference(i, old_address, std::addressof(target));
+				}
+			}
+		}
+
+		if(const auto outputs = target.get_outputs(); !outputs.empty()){
+			for(const successor_entry& output : outputs){
+				target.rebind_successor_reference(output.index, old_address, std::addressof(target));
+				if(raw_node_ptr next = output.get()){
+					next->rebind_predecessor_reference(output.index, old_address, std::addressof(target));
+				}
+			}
+		}
+	}
+
+	void clear() noexcept{
+		node.disconnect_self_from_context();
+
+		if(!node.decr_ref()){
+			std::println(std::cerr, "holder must be the last to release the node");
+			std::terminate();
+		}
+	}
+
+public:
+	T node;
+
+	~node_holder_portable(){
+		clear();
+	}
+
+	node_holder_portable(const node_holder_portable& other) = delete;
+	node_holder_portable& operator=(const node_holder_portable& other) = delete;
+
+	node_holder_portable(node_holder_portable&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+		requires std::move_constructible<T>
+		: node(std::move(other.node)){
+		other.node.incr_ref();
+		rebind_neighbors(node, std::addressof(other.node));
+	}
+
+	node_holder_portable& operator=(node_holder_portable&& other) noexcept(std::is_nothrow_move_assignable_v<T>)
+		requires std::is_nothrow_move_assignable_v<T>{
+		if(this == &other) return *this;
+
+		clear();
+		node = std::move(other.node);
+		other.node.incr_ref();
+		rebind_neighbors(node, std::addressof(other.node));
+		return *this;
+	}
+
+	node_holder_portable(){
+		node.incr_ref();
+	}
+
+	template <typename... Args>
+		requires (std::constructible_from<T, Args&&...>)
+	explicit(false) node_holder_portable(Args&&... args) : node(std::forward<Args>(args)...){
+		node.incr_ref();
 	}
 
 

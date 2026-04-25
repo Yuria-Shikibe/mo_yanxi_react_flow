@@ -175,14 +175,14 @@ public:
 
 	template <std::derived_from<node> T>
 	NODISCARD_ON_ADD T& add_node(T&& node){
-		auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(std::move(node)));
+		auto& ptr = nodes_anonymous_.emplace_back(node_pointer(std::move(node)));
 		this->process_node(*ptr);
 		return static_cast<T&>(*ptr);
 	}
 
 	template <std::derived_from<node> T>
 	NODISCARD_ON_ADD T& add_node(const T& node){
-		auto& ptr = nodes_anonymous_.emplace_back(this->make_node<T>(node));
+		auto& ptr = nodes_anonymous_.emplace_back(node_pointer(node));
 		this->process_node(*ptr);
 		return static_cast<T&>(*ptr);
 	}

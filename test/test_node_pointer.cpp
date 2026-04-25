@@ -27,16 +27,6 @@ TEST(NodePointerTest, ConstructorRawPtr) {
     EXPECT_TRUE(destroyed);
 }
 
-TEST(NodePointerTest, ConstructorReference) {
-    bool destroyed = false;
-    MockNode* raw_node = new MockNode(&destroyed);
-    {
-        node_pointer ptr(*raw_node); // increments ref count (0->1)
-        EXPECT_EQ(ptr.get(), raw_node);
-    } // ptr goes out of scope, ref count 1 -> 0, deletes node
-    EXPECT_TRUE(destroyed);
-}
-
 TEST(NodePointerTest, ConstructorInPlace) {
     bool destroyed = false;
     {

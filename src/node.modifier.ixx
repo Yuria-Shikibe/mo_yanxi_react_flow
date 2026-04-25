@@ -123,6 +123,12 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
+		void rebind_predecessor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept final{
+			if(parents_[slot].get() == from){
+				parents_[slot].reset(to);
+			}
+		}
+
 		bool connect_successors_impl(std::size_t slot, node& post) final{
 			if(auto&& ptr = post.get_inputs()[slot]){
 				// 彻底断开目标节点旧有的连接双向关系
@@ -134,6 +140,15 @@ namespace mo_yanxi::react_flow{
 
 		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
 			return try_erase(successors_, slot, post);
+		}
+
+		void rebind_successor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept final{
+			for(auto& successor : successors_){
+				if(successor.index == slot && successor.get() == from){
+					successor.entity.rebind_without_ref(to);
+					return;
+				}
+			}
 		}
 
 

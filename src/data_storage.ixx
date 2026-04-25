@@ -502,7 +502,7 @@ namespace mo_yanxi::react_flow{
 			return value_;
 		}
 
-		explicit(false) constexpr operator data_carrier_obj&() noexcept {
+		explicit(false) constexpr operator data_carrier_obj&() & noexcept {
 			return reinterpret_cast<data_carrier_obj&>(*this);
 		}
 

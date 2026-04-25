@@ -43,11 +43,11 @@ namespace mo_yanxi::react_flow{
 		}
 
 		void update_value(data_carrier<T>& data){
-			this->on_push(0, data);
+			this->on_push(0, std::move(data));
 		}
 
 		void update_value(data_carrier<T>&& data){
-			this->on_push(0, data);
+			this->on_push(0, std::move(data));
 		}
 
 		[[nodiscard]] std::span<const data_type_index> get_in_socket_type_index() const noexcept final{
@@ -72,6 +72,15 @@ namespace mo_yanxi::react_flow{
 
 		bool erase_successors_single_edge(std::size_t slot, node& post) noexcept final{
 			return try_erase(successors, slot, post);
+		}
+
+		void rebind_successor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept final{
+			for(auto& successor : successors){
+				if(successor.index == slot && successor.get() == from){
+					successor.entity.rebind_without_ref(to);
+					return;
+				}
+			}
 		}
 
 	protected:
@@ -170,6 +179,13 @@ namespace mo_yanxi::react_flow{
 			assert(slot == 0);
 			if(parent.get() == std::addressof(prev)){
 				parent.reset(nullptr);
+			}
+		}
+
+		void rebind_predecessor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept final{
+			assert(slot == 0);
+			if(parent.get() == from){
+				parent.reset(to);
 			}
 		}
 

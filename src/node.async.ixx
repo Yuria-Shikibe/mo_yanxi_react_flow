@@ -49,8 +49,8 @@ namespace mo_yanxi::react_flow{
 	private:
 		manager* manager_{};
 
-		//TODO successor_that_receives progress
-		node_holder<provider_general<progress_check>> progress_provider_{};
+
+		node_holder_portable<provider_general<progress_check>> progress_provider_{};
 
 		async_type async_type_{async_type::def};
 		std::size_t dispatched_count_{};
