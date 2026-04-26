@@ -127,7 +127,7 @@ target("mo_yanxi.react_flow.test")
     set_kind("binary")
     set_languages("c++23")
 
-    --set_enabled(has_config("add_test"))
+    set_enabled(has_config("add_test"))
     set_default(has_config("add_test"))
 
     add_deps("mo_yanxi.react_flow", {public = true})
@@ -142,7 +142,7 @@ target("mo_yanxi.react_flow.example")
 
     add_deps("mo_yanxi.react_flow", {public = true})
     --
-    --set_enabled(has_config("add_examples"))
+    set_enabled(has_config("add_examples"))
     set_default(has_config("add_examples"))
 
     add_files("examples/**.cpp")
