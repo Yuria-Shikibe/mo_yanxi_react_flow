@@ -691,12 +691,12 @@ public:
 
 	template <typename S>
 	auto* operator->(this S& self) noexcept{
-		return std::to_address(self.node);
+		return &self.node;
 	}
 
 	template <typename S>
 	auto&& operator*(this S&& self) noexcept{
-		return std::forward_like<S>(*std::to_address(self));
+		return std::forward_like<S>(self.node);
 	}
 };
 

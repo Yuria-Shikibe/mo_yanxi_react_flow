@@ -108,7 +108,7 @@ rule_end()
 
 -- 主库 Target
 target("mo_yanxi.react_flow")
-    set_kind("moduleonly")
+    set_kind("object")
     set_languages("c++23")
     add_rules("project.common")
     add_files("src/**.ixx", {public = true})
