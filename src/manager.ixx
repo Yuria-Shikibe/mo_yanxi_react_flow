@@ -187,6 +187,12 @@ public:
 		return static_cast<T&>(*ptr);
 	}
 
+	NODISCARD_ON_ADD node& add_node(node_pointer&& node){
+		auto& ptr = nodes_anonymous_.emplace_back(std::move(node));
+		this->process_node(*ptr);
+		return *ptr;
+	}
+
 	void clear_isolated() noexcept{
 		try{
 			for(auto&& node : nodes_anonymous_){
