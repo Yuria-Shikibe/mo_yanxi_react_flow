@@ -572,7 +572,7 @@ protected:
  */
 export
 template <std::derived_from<node> T>
-struct node_holder{
+struct node_holder_pinned{
 private:
 	void clear() noexcept{
 		node.disconnect_self_from_context();
@@ -586,22 +586,22 @@ private:
 public:
 	T node;
 
-	~node_holder(){
+	~node_holder_pinned(){
 		clear();
 	}
 
-	node_holder(const node_holder& other) = delete;
-	node_holder(node_holder&& other) noexcept = delete;
-	node_holder& operator=(const node_holder& other) = delete;
-	node_holder& operator=(node_holder&& other) noexcept = delete;
+	node_holder_pinned(const node_holder_pinned& other) = delete;
+	node_holder_pinned(node_holder_pinned&& other) noexcept = delete;
+	node_holder_pinned& operator=(const node_holder_pinned& other) = delete;
+	node_holder_pinned& operator=(node_holder_pinned&& other) noexcept = delete;
 
-	node_holder(){
+	node_holder_pinned(){
 		static_cast<struct node&>(node).incr_ref();
 	}
 
 	template <typename... Args>
 		requires (std::constructible_from<T, Args&&...>)
-	explicit(false) node_holder(Args&&... args) : node(std::forward<Args>(args)...){
+	explicit(false) node_holder_pinned(Args&&... args) : node(std::forward<Args>(args)...){
 		static_cast<struct node&>(node).incr_ref();
 	}
 
