@@ -55,7 +55,8 @@ public:
 	}
 
 	template <typename T>
-		requires (std::derived_from<std::decay_t<T>, node> && !std::is_lvalue_reference_v<T> && std::constructible_from<std::decay_t<T>, T&&>)
+		requires (std::derived_from<std::decay_t<T>, node> && !std::is_lvalue_reference_v<T> && std::constructible_from<
+			std::decay_t<T>, T&&>)
 	constexpr inline explicit(false) node_pointer(T&& val)
 		: node_(new std::decay_t<T>(std::forward<T>(val))){
 		incr_();
@@ -133,65 +134,7 @@ private:
 export
 using raw_node_ptr = node*;
 
-export
-struct tracked_parent_ptr{
-private:
-	raw_node_ptr ptr_{nullptr};
 
-	constexpr void release() noexcept{
-		// 移除 decr_ref 与 delete 逻辑，仅作为弱引用观察者
-		ptr_ = nullptr;
-	}
-
-public:
-	constexpr  tracked_parent_ptr() = default;
-
-	constexpr  ~tracked_parent_ptr(){
-		release();
-	}
-
-	constexpr void reset(node* new_ptr) noexcept{
-		// 移除 incr_ref，单纯更新指向
-		ptr_ = new_ptr;
-	}
-
-	// 禁用拷贝语义，防止引用计数意外克隆
-	constexpr tracked_parent_ptr(const tracked_parent_ptr&) = delete;
-	constexpr tracked_parent_ptr& operator=(const tracked_parent_ptr&) = delete;
-
-	constexpr tracked_parent_ptr(tracked_parent_ptr&& other) noexcept : ptr_(std::exchange(other.ptr_, nullptr)){
-	}
-
-	constexpr tracked_parent_ptr& operator=(tracked_parent_ptr&& other) noexcept{
-		if(this != &other){
-			release();
-			ptr_ = std::exchange(other.ptr_, nullptr);
-		}
-		return *this;
-	}
-
-	constexpr friend bool operator==(const tracked_parent_ptr& lhs, const tracked_parent_ptr& rhs) noexcept = default;
-
-	constexpr friend bool operator==(const tracked_parent_ptr& lhs, raw_node_ptr ptr) noexcept{
-		return lhs.ptr_ == ptr;
-	}
-
-	constexpr friend bool operator==(raw_node_ptr ptr, const tracked_parent_ptr& rhs) noexcept{
-		return ptr == rhs.ptr_;
-	}
-
-	constexpr raw_node_ptr get() const noexcept{ return ptr_; }
-
-	constexpr explicit operator bool() const noexcept{
-		return ptr_ != nullptr;
-	}
-
-	constexpr node* operator->() const noexcept{ return ptr_; }
-
-	constexpr node& operator*() const noexcept{
-		return *ptr_;
-	}
-};
 
 export
 struct invalid_node_error : std::invalid_argument{
@@ -205,7 +148,7 @@ struct invalid_node_error : std::invalid_argument{
 };
 
 
-using push_dispatch_fptr = void(*)(node*, std::size_t, data_carrier_obj&&);
+using push_dispatch_fptr = void(*)(node&, std::size_t, data_carrier_obj&&);
 
 export
 struct successor_entry{
@@ -290,13 +233,10 @@ struct node{
 	friend successor_entry;
 	friend manager;
 	friend node_pointer;
+	friend bool is_ring_bridge(const node*, const node*);
 
 private:
 	exchange_on_move<unsigned> reference_count_{};
-
-	// #ifdef THREAD_CHECK
-	// 		std::thread::id created_thread_id_{std::this_thread::get_id()};
-	// #endif
 
 
 protected:
@@ -389,7 +329,7 @@ public:
 		}
 	}
 
-	[[nodiscard]] virtual std::span<const tracked_parent_ptr> get_inputs() const noexcept{
+	[[nodiscard]] virtual std::span<const raw_node_ptr> get_inputs() const noexcept{
 		return {};
 	}
 
@@ -527,32 +467,12 @@ protected:
 #pragma endregion
 
 public:
-	[[nodiscard]] virtual push_dispatch_fptr get_push_dispatch_fptr() const noexcept{
-		return [] FORCE_INLINE (node* n, std::size_t idx, data_carrier_obj&& data){
-			n->on_push(idx, std::move(data));
-		};
-	}
-
-protected:
-	template <typename S>
-	push_dispatch_fptr get_this_class_push_dispatch_fptr(this const S& self) noexcept{
-		return [] FORCE_INLINE (node* n, std::size_t idx, data_carrier_obj&& data){
-			static_cast<S*>(n)->S::on_push(idx, std::move(data));
-		};
+	[[nodiscard]] virtual push_dispatch_fptr get_push_dispatch_fptr(std::size_t index) const noexcept{
+		return nullptr;
 	}
 
 	virtual void on_pulse_received(manager& m){
 		return;
-	}
-
-	/**
-	 * @brief update the node
-	 *
-	 * The data flow is from source to terminal (push)
-	 *
-	 * @param in_data ptr to const data, provided by parent
-	 */
-	virtual void on_push(std::size_t target_index, data_carrier_obj&& in_data){
 	}
 
 	/**
@@ -625,7 +545,7 @@ private:
 		if(const auto inputs = target.get_inputs(); !inputs.empty()){
 			for(std::size_t i = 0; i < inputs.size(); ++i){
 				target.rebind_predecessor_reference(i, old_address, std::addressof(target));
-				if(raw_node_ptr input = inputs[i].get()){
+				if(raw_node_ptr input = inputs[i]){
 					input->rebind_successor_reference(i, old_address, std::addressof(target));
 				}
 			}
@@ -792,14 +712,21 @@ constexpr void node_pointer::decr_() const noexcept{
 
 template <typename T>
 void successor_entry::update(data_carrier<T>&& data) const{
+#ifndef NDEBUG
 	auto idx = entity->get_in_socket_type_index()[index];
 	assert(unstable_type_identity_of<T>() == idx);
-	entity->on_push(index, std::move(data));
+#endif
+
+	push_fp(*entity.get(), index, std::move(data));
 }
 
-successor_entry::successor_entry(const std::size_t index, node& entity) : index(index),
-                                                                          entity(entity),
-                                                                          push_fp{entity.get_push_dispatch_fptr()}{
+successor_entry::successor_entry(const std::size_t index, node& entity) :
+	index(index),
+	entity(entity),
+	push_fp{entity.get_push_dispatch_fptr(index)}{
+	if(push_fp == nullptr){
+		throw invalid_node_error{"node is not pushable"};
+	}
 }
 
 void successor_entry::update(data_carrier_obj&& data, data_type_index checker) const{
@@ -808,7 +735,7 @@ void successor_entry::update(data_carrier_obj&& data, data_type_index checker) c
 		throw invalid_node_error{"Type Mismatch on update"};
 	}
 #endif
-	push_fp(entity.get(), index, std::move(data));
+	push_fp(*entity.get(), index, std::move(data));
 }
 
 void successor_entry::mark_updated() const{
@@ -827,9 +754,8 @@ bool is_reachable(const node* start_node, const node* target_node, std::unordere
 
 	visited.insert(start_node);
 
-	// 修复点：拿到 tracked_parent_ptr 后解出原生指针
-	for(const auto& neighbor_wrapper : start_node->get_inputs()){
-		if(const node* neighbor = neighbor_wrapper.get()){
+	for(const node* neighbor : start_node->get_inputs()){
+		if(neighbor){
 			if(!visited.contains(neighbor)){
 				if(is_reachable(neighbor, target_node, visited)){
 					return true;

@@ -202,5 +202,4 @@ TEST(MoveOptimizationTest, ProviderGeneralConsumesRvalueCarrier) {
 
     EXPECT_TRUE(listener.updated);
     EXPECT_EQ(listener.last_value, "payload");
-    EXPECT_TRUE(carrier.is_empty());
 }

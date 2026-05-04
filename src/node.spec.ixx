@@ -35,19 +35,19 @@ namespace mo_yanxi::react_flow{
 
 
 		void update_value(T&& value){
-			this->on_push(0, data_carrier{std::move(value)});
+			react_flow::push_to_successors(successors, data_carrier{std::move(value)});
 		}
 
 		void update_value(const T& value){
-			this->on_push(0, data_carrier{value});
+			react_flow::push_to_successors(successors, data_carrier{value});
 		}
 
 		void update_value(data_carrier<T>& data){
-			this->on_push(0, std::move(data));
+			react_flow::push_to_successors(successors, std::move(data));
 		}
 
 		void update_value(data_carrier<T>&& data){
-			this->on_push(0, std::move(data));
+			react_flow::push_to_successors(successors, std::move(data));
 		}
 
 		[[nodiscard]] std::span<const data_type_index> get_in_socket_type_index() const noexcept final{
@@ -93,11 +93,6 @@ namespace mo_yanxi::react_flow{
 		}
 
 		successor_list successors{};
-
-		void on_push(std::size_t target_index, data_carrier_obj&& in_data) override{
-			assert(target_index == 0);
-			react_flow::push_to_successors(successors, data_carrier_cast<T>(std::move(in_data)));
-		}
 	};
 
 	export
@@ -111,7 +106,7 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		static constexpr data_type_index node_data_type_index = unstable_type_identity_of<T>();
-		tracked_parent_ptr parent{};
+		raw_node_ptr parent{nullptr};
 
 	protected:
 		[[nodiscard]] explicit terminal(propagate_type data_propagate_type)
@@ -133,7 +128,7 @@ namespace mo_yanxi::react_flow{
 			return false;
 		}
 
-		[[nodiscard]] std::span<const tracked_parent_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
 			return {&parent, 1};
 		}
 
@@ -170,32 +165,32 @@ namespace mo_yanxi::react_flow{
 		void disconnect_self_from_context() noexcept final{
 			if(parent){
 				parent->erase_successors_single_edge(0, *this);
-				parent.reset(nullptr);
+				parent = nullptr;
 			}
 		}
 
 
 		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
 			assert(slot == 0);
-			if(parent.get() == std::addressof(prev)){
-				parent.reset(nullptr);
+			if(parent == std::addressof(prev)){
+				parent = nullptr;
 			}
 		}
 
 		void rebind_predecessor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept final{
 			assert(slot == 0);
-			if(parent.get() == from){
-				parent.reset(to);
+			if(parent == from){
+				parent = to;
 			}
 		}
 
 	protected:
 		void connect_predecessor_impl(const std::size_t slot, node& prev) final{
 			assert(slot == 0);
-			if(auto ptr = parent.get()){
+			if(auto ptr = parent){
 				ptr->erase_successors_single_edge(0, *this);
 			}
-			parent.reset(std::addressof(prev));
+			parent = std::addressof(prev);
 		}
 
 
@@ -214,7 +209,7 @@ namespace mo_yanxi::react_flow{
 
 		friend terminal_cached<T>;
 
-		void on_push(const std::size_t from_index, data_carrier_obj&& in_data) override{
+		void on_push(const std::size_t from_index, data_carrier_obj&& in_data){
 			assert(from_index == 0);
 			this->data_pending_state_ = data_pending_state::done;
 			auto& storage = data_carrier_cast<T>(in_data);
@@ -222,10 +217,13 @@ namespace mo_yanxi::react_flow{
 		}
 
 	public:
-		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr() const noexcept override{
-			return this->get_this_class_push_dispatch_fptr();
+		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr(std::size_t idx) const noexcept override{
+			return + [] FORCE_INLINE ATTR_FORCEINLINE_SENTENCE (node& n, std::size_t, data_carrier_obj&& data){
+				static_cast<terminal*>(&n)->on_push(0, std::move(data));
+			};
 		}
 	};
+
 
 	export
 	template <typename T>
@@ -283,18 +281,20 @@ namespace mo_yanxi::react_flow{
 			this->on_update(d);
 		}
 
-		void on_push(const std::size_t from_index, data_carrier_obj&& in_data) override{
+		void on_push(const std::size_t from_index, data_carrier_obj&& in_data){
 			switch(this->data_propagate_type_){
 			case propagate_type::eager : this->data_pending_state_ = data_pending_state::done;
 				{
 					auto& storage = data_carrier_cast<T>(in_data);
-					cache_ = storage.get();
-
-
-					data_carrier d{cache_};
-					this->on_update(d);
+					this->on_update(storage);
+					if constexpr (!data_carrier<T>::is_trivial) {
+						if (!storage.is_empty()) {
+							cache_ = storage.get();
+						}
+					} else {
+						cache_ = storage.get();
+					}
 				}
-
 				break;
 			case propagate_type::lazy : this->data_pending_state_ = data_pending_state::expired;
 				break;
@@ -310,6 +310,7 @@ namespace mo_yanxi::react_flow{
 
 	private:
 		T cache_{};
+		static const std::array<push_dispatch_fptr, 1> push_table;
 
 		void update_cache(){
 			if(this->is_data_expired()){
@@ -323,10 +324,17 @@ namespace mo_yanxi::react_flow{
 
 
 	public:
-		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr() const noexcept override{
-			return this->get_this_class_push_dispatch_fptr();
+		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr(std::size_t idx) const noexcept override{
+			return push_table[idx];
 		}
 	};
+
+	template <typename T>
+	inline constexpr std::array<push_dispatch_fptr, 1> terminal_cached<T>::push_table{{
+		[] FORCE_INLINE (node& n, std::size_t, data_carrier_obj&& data){
+			static_cast<terminal_cached*>(&n)->on_push(0, std::move(data));
+		}
+	}};
 
 export
 template <typename T, typename O = T, std::invocable<const T&> F = std::identity>
@@ -379,7 +387,7 @@ public:
 
     bool pull_and_push([[maybe_unused]] bool allow_expired) override {
         this->data_pending_state_ = data_pending_state::done;
-        react_flow::push_to_successors(this->successors, data_carrier<O>{get_output_cache()});
+        react_flow::push_to_successors(this->successors, make_output_carrier_());
         return true;
     }
 
@@ -410,24 +418,26 @@ public:
 
 protected:
 
-    void on_push(std::size_t, data_carrier_obj&& in_data) override {
-        auto& storage = data_carrier_cast<T>(in_data);
-        data_ = storage.get();
-        on_update();
-    }
-
     void on_pulse_received(manager& m) override {
         if(this->data_pending_state_ != data_pending_state::waiting_pulse) return;
         this->data_pending_state_ = data_pending_state::done;
-        react_flow::push_to_successors(this->successors, data_carrier<O>{get_output_cache()});
+        react_flow::push_to_successors(this->successors, make_output_carrier_());
     }
 
 private:
+    data_carrier<O> make_output_carrier_() const {
+        if constexpr (std::same_as<F, std::identity> && std::same_as<O, T>) {
+            return data_carrier<O>{data_};
+        } else {
+            return data_carrier<O>{get_output_cache()};
+        }
+    }
+
     void on_update() {
         switch(this->data_propagate_type_) {
         case propagate_type::eager :
             this->data_pending_state_ = data_pending_state::done;
-            react_flow::push_to_successors(this->successors, data_carrier<O>{get_output_cache()});
+            react_flow::push_to_successors(this->successors, make_output_carrier_());
             break;
         case propagate_type::lazy :
             this->data_pending_state_ = data_pending_state::done;

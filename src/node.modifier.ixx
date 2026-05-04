@@ -56,9 +56,18 @@ namespace mo_yanxi::react_flow{
 #endif
 
 		static constexpr std::array<bool, argument_count> quiet_map{descriptor_trait<Args>::no_push...};
+		template <std::size_t... Is>
+		static constexpr auto make_push_table(std::index_sequence<Is...>) noexcept{
+			return std::array<push_dispatch_fptr, argument_count>{{
+				[] FORCE_INLINE (node& n, std::size_t, data_carrier_obj&& data){
+					static_cast<Impl*>(&n)->Impl::template on_push_index<Is>(std::move(data));
+				}...
+			}};
+		}
+		static const std::array<push_dispatch_fptr, argument_count> push_table;
 
 	private:
-		std::array<tracked_parent_ptr, argument_count> parents_{};
+		std::array<raw_node_ptr, argument_count> parents_{};
 		successor_list successors_{};
 
 	protected:
@@ -74,8 +83,8 @@ namespace mo_yanxi::react_flow{
 
 	public:
 		[[nodiscard]] bool is_isolated() const noexcept final{
-			return std::ranges::none_of(parents_, [](const tracked_parent_ptr& p){
-				return static_cast<bool>(p);
+			return std::ranges::none_of(parents_, [](raw_node_ptr p){
+				return p != nullptr;
 			}) && successors_.empty();
 		}
 
@@ -85,9 +94,9 @@ namespace mo_yanxi::react_flow{
 
 		void disconnect_self_from_context() noexcept final{
 			for(std::size_t i = 0; i < parents_.size(); ++i){
-				if(raw_node_ptr ptr = parents_[i].get()){
+				if(raw_node_ptr ptr = parents_[i]){
 					ptr->erase_successors_single_edge(i, *this);
-					parents_[i].reset(nullptr);
+					parents_[i] = nullptr;
 				}
 			}
 			for(const auto& successor : successors_){
@@ -96,7 +105,7 @@ namespace mo_yanxi::react_flow{
 			successors_.clear();
 		}
 
-		[[nodiscard]] std::span<const tracked_parent_ptr> get_inputs() const noexcept final{
+		[[nodiscard]] std::span<const raw_node_ptr> get_inputs() const noexcept final{
 			return parents_;
 		}
 
@@ -106,21 +115,21 @@ namespace mo_yanxi::react_flow{
 
 	protected:
 		void connect_predecessor_impl(std::size_t slot, node& prev) final{
-			if(auto ptr = parents_[slot].get()){
+			if(auto ptr = parents_[slot]){
 				ptr->erase_successors_single_edge(slot, *this);
 			}
-			parents_[slot].reset(std::addressof(prev));
+			parents_[slot] = std::addressof(prev);
 		}
 
 		void erase_predecessor_single_edge(std::size_t slot, node& prev) noexcept final{
-			if(parents_[slot].get() == &prev){
-				parents_[slot].reset(nullptr);
+			if(parents_[slot] == &prev){
+				parents_[slot] = nullptr;
 			}
 		}
 
 		void rebind_predecessor_reference(std::size_t slot, raw_node_ptr from, raw_node_ptr to) noexcept final{
-			if(parents_[slot].get() == from){
-				parents_[slot].reset(to);
+			if(parents_[slot] == from){
+				parents_[slot] = to;
 			}
 		}
 
@@ -168,7 +177,7 @@ namespace mo_yanxi::react_flow{
 			} else{
 				data_state states{};
 
-				for(const tracked_parent_ptr& p : parents_){
+				for(raw_node_ptr p : parents_){
 					update_state_enum(states, p->get_data_state());
 				}
 
@@ -176,8 +185,8 @@ namespace mo_yanxi::react_flow{
 			}
 		}
 
-		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr() const noexcept override{
-			return static_cast<const Impl*>(this)->get_this_class_push_dispatch_fptr();
+		[[nodiscard]] push_dispatch_fptr get_push_dispatch_fptr(std::size_t idx) const noexcept override{
+			return push_table[idx];
 		}
 	protected:
 
@@ -190,10 +199,10 @@ namespace mo_yanxi::react_flow{
 				return true;
 			} else{
 				if constexpr(descriptor_trait<std::tuple_element_t<trigger_index, input_descriptors>>::cached){
-					switch(trigger_type& trigger = *std::get<trigger_index>(arguments_)){
+					switch(trigger_type trigger = *std::get<trigger_index>(arguments_)){
 					case trigger_type::active : return true;
 					case trigger_type::disabled : return false;
-					case trigger_type::once : trigger = trigger_type::disabled;
+					case trigger_type::once : std::get<trigger_index>(arguments_).set(trigger_type::disabled);
 						return true;
 					default : std::unreachable();
 					}
@@ -219,26 +228,19 @@ namespace mo_yanxi::react_flow{
 			this->update(trigger_type::active, nullptr);
 		}
 
-		void on_push(std::size_t target_index, data_carrier_obj&& in_data) override{
+		template <std::size_t I>
+		void on_push_index(data_carrier_obj&& in_data){
 			auto update_cache = [&]{
-				[&, this]<std::size_t ... Idx>(std::index_sequence<Idx...>){
-					([&, this]<std::size_t I>(){
-						using Ty = std::tuple_element_t<I, input_descriptors>;
-
-						if constexpr(!descriptor_trait<Ty>::cached) return false;
-						else if(I == target_index){
-							using InputTy = typename descriptor_trait<Ty>::input_type;
-							std::get<I>(arguments_).set(data_carrier_cast<InputTy>(in_data));
-							expired_flags_.template set<I>(false);
-							return true;
-						}
-						return false;
-					}.template operator()<Idx>() || ...);
-				}(std::index_sequence_for<Args...>{});
+				using Ty = std::tuple_element_t<I, input_descriptors>;
+				if constexpr(descriptor_trait<Ty>::cached){
+					using InputTy = typename descriptor_trait<Ty>::input_type;
+					std::get<I>(arguments_).set(data_carrier_cast<InputTy>(in_data));
+					expired_flags_.template set<I>(false);
+				}
 			};
 
-			if(quiet_map[target_index]){
-				if(has_cache_at(target_index)){
+			if constexpr(quiet_map[I]){
+				if constexpr(descriptor_trait<std::tuple_element_t<I, input_descriptors>>::cached){
 					update_cache();
 				}
 				mark_updated(-1);
@@ -247,7 +249,7 @@ namespace mo_yanxi::react_flow{
 
 			trigger_type trigger{};
 			if constexpr(has_trigger){
-				if(target_index == trigger_index){
+				if constexpr(I == trigger_index){
 					auto rst = data_carrier_cast<trigger_type>(in_data).get();
 					using DescriptorTy = std::tuple_element_t<trigger_index, input_descriptors>;
 					if constexpr(descriptor_trait<DescriptorTy>::cached && descriptor_trait<DescriptorTy>::identity){
@@ -267,8 +269,8 @@ namespace mo_yanxi::react_flow{
 			}
 
 			switch(this->get_propagate_type()){
-			case propagate_type::eager : this->update(trigger, [&]<std::size_t I>(argument_pass_type& arguments){
-					if(I == target_index){
+			case propagate_type::eager : this->update(trigger, [&]<std::size_t J>(argument_pass_type& arguments){
+					if constexpr(J == I){
 						using Ty = std::tuple_element_t<I, input_descriptors>;
 						using InputTy = typename descriptor_trait<Ty>::input_type;
 						std::get<I>(arguments) = std::get<I>(arguments_) << std::move(data_carrier_cast<InputTy>(in_data));
@@ -374,6 +376,11 @@ namespace mo_yanxi::react_flow{
 		}
 
 	};
+
+	template <typename Impl, typename Ret, typename... Args>
+		requires (spec_of_descriptor<Ret> && (spec_of_descriptor<Args> && ...))
+	inline constexpr std::array<push_dispatch_fptr, modifier_base<Impl, Ret, Args...>::argument_count>
+	modifier_base<Impl, Ret, Args...>::push_table = modifier_base::make_push_table(std::make_index_sequence<argument_count>{});
 
 	export
 	template <typename Ret, typename... Args>
